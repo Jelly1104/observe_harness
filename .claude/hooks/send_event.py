@@ -146,7 +146,22 @@ def main():
     # reason: SessionEnd
     if 'reason' in input_data:
         event_data['reason'] = input_data['reason']
-    
+
+    # Team message fields: PreToolUse/PostToolUse where tool_name == 'SendMessage'
+    # Promotes message details to top-level for easier querying in the dashboard.
+    if input_data.get('tool_name') == 'SendMessage':
+        tool_input = input_data.get('tool_input', {})
+        if tool_input.get('to'):
+            event_data['message_to'] = tool_input['to']
+        if tool_input.get('summary'):
+            event_data['message_summary'] = tool_input['summary']
+        msg = tool_input.get('message', '')
+        if isinstance(msg, str):
+            event_data['message_text'] = msg[:2000]
+        elif isinstance(msg, dict):
+            event_data['message_type'] = msg.get('type', '')
+            event_data['message_text'] = msg.get('reason', '') or msg.get('feedback', '')
+
     # Handle --add-chat option
     if args.add_chat and 'transcript_path' in input_data:
         transcript_path = input_data['transcript_path']

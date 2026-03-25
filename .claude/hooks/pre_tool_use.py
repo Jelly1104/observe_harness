@@ -249,11 +249,25 @@ def summarize_tool_input(tool_name, tool_input):
         summary["task_id"] = tool_input.get("task_id", "")
 
     elif tool_name == 'SendMessage':
-        summary["type"] = tool_input.get("type", "")
-        if tool_input.get("recipient"):
-            summary["recipient"] = tool_input["recipient"]
+        if tool_input.get("to"):
+            summary["to"] = tool_input["to"]
         if tool_input.get("summary"):
             summary["summary"] = tool_input["summary"]
+        # Extract message content for team conversation observability
+        msg = tool_input.get("message", "")
+        if isinstance(msg, str):
+            summary["message_text"] = msg[:500]
+        elif isinstance(msg, dict):
+            # Structured protocol message (shutdown_request, plan_approval_response, etc.)
+            summary["message_type"] = msg.get("type", "")
+            if msg.get("request_id"):
+                summary["request_id"] = msg["request_id"]
+            if "approve" in msg:
+                summary["approve"] = msg["approve"]
+            if msg.get("feedback"):
+                summary["message_text"] = msg["feedback"][:500]
+            if msg.get("reason"):
+                summary["message_text"] = msg["reason"][:500]
 
     elif tool_name == 'TaskCreate':
         summary["subject"] = tool_input.get("subject", "")[:100]

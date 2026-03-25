@@ -180,19 +180,36 @@ export function getRecentEvents(limit: number = 300): HookEvent[] {
 
   const rows = stmt.all(limit) as any[];
 
-  return rows.map(row => ({
-    id: row.id,
-    source_app: row.source_app,
-    session_id: row.session_id,
-    hook_event_type: row.hook_event_type,
-    payload: JSON.parse(row.payload),
-    chat: row.chat ? JSON.parse(row.chat) : undefined,
-    summary: row.summary || undefined,
-    timestamp: row.timestamp,
-    humanInTheLoop: row.humanInTheLoop ? JSON.parse(row.humanInTheLoop) : undefined,
-    humanInTheLoopStatus: row.humanInTheLoopStatus ? JSON.parse(row.humanInTheLoopStatus) : undefined,
-    model_name: row.model_name || undefined
-  })).reverse();
+  return rows.map(row => {
+    const payload = JSON.parse(row.payload);
+    const event: HookEvent = {
+      id: row.id,
+      source_app: row.source_app,
+      session_id: row.session_id,
+      hook_event_type: row.hook_event_type,
+      payload,
+      chat: row.chat ? JSON.parse(row.chat) : undefined,
+      summary: row.summary || undefined,
+      timestamp: row.timestamp,
+      humanInTheLoop: row.humanInTheLoop ? JSON.parse(row.humanInTheLoop) : undefined,
+      humanInTheLoopStatus: row.humanInTheLoopStatus ? JSON.parse(row.humanInTheLoopStatus) : undefined,
+      model_name: row.model_name || undefined
+    };
+    // Re-extract team message fields from payload for SendMessage tool events
+    if (payload.tool_name === 'SendMessage') {
+      const toolInput = payload.tool_input || {};
+      if (toolInput.to) event.message_to = toolInput.to;
+      if (toolInput.summary) event.message_summary = toolInput.summary;
+      const msg = toolInput.message;
+      if (typeof msg === 'string') {
+        event.message_text = msg.slice(0, 2000);
+      } else if (msg && typeof msg === 'object') {
+        event.message_type = msg.type || '';
+        event.message_text = msg.reason || msg.feedback || '';
+      }
+    }
+    return event;
+  }).reverse();
 }
 
 // Theme database functions

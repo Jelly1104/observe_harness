@@ -39,6 +39,12 @@ export interface HookEvent {
   // NEW: Optional HITL data
   humanInTheLoop?: HumanInTheLoop;
   humanInTheLoopStatus?: HumanInTheLoopStatus;
+
+  // Team message fields (promoted from SendMessage tool_input)
+  message_to?: string;
+  message_summary?: string;
+  message_text?: string;
+  message_type?: string;
 }
 
 export interface FilterOptions {
