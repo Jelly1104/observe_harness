@@ -27,7 +27,10 @@ from datetime import datetime
 from utils.summarizer import generate_event_summary
 from utils.model_extractor import get_model_from_transcript
 
-def send_event_to_server(event_data, server_url='http://localhost:4000/events'):
+def send_event_to_server(event_data, server_url=None):
+    if server_url is None:
+        base = os.environ.get('CLAUDE_OBSERVE_SERVER', 'http://localhost:4000')
+        server_url = f'{base.rstrip("/")}/events'
     """Send event data to the observability server."""
     try:
         # Prepare the request
@@ -60,7 +63,8 @@ def main():
     parser = argparse.ArgumentParser(description='Send Claude Code hook events to observability server')
     parser.add_argument('--source-app', required=True, help='Source application name')
     parser.add_argument('--event-type', required=True, help='Hook event type (PreToolUse, PostToolUse, etc.)')
-    parser.add_argument('--server-url', default='http://localhost:4000/events', help='Server URL')
+    default_server = os.environ.get('CLAUDE_OBSERVE_SERVER', 'http://localhost:4000')
+    parser.add_argument('--server-url', default=f'{default_server.rstrip("/")}/events', help='Server URL')
     parser.add_argument('--add-chat', action='store_true', help='Include chat transcript if available')
     parser.add_argument('--summarize', action='store_true', help='Generate AI summary of the event')
     

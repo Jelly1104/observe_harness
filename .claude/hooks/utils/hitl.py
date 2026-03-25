@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import asyncio
 from threading import Thread
@@ -15,7 +16,7 @@ class HITLRequest:
         hitl_type: Literal['question', 'permission', 'choice'] = 'question',
         choices: Optional[list[str]] = None,
         timeout: int = 300,  # 5 minutes default
-        observability_url: str = "http://localhost:4000"
+        observability_url: str = os.environ.get('CLAUDE_OBSERVE_SERVER', 'http://localhost:4000')
     ):
         self.question = question
         self.hitl_type = hitl_type
