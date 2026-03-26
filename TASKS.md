@@ -32,6 +32,12 @@
 
 Don't implement these yet. They're here for future reference.
 
+- [ ] Track token & context window usage per session and agent
+  - On Stop hook, use two-way pattern: hook reads transcript JSONL, sums `usage` fields from all assistant messages, posts totals to `/api/sessions/:id/usage` callback
+  - Subagent usage already available in PostToolUse:Agent `tool_response` (totalTokens, totalDurationMs, usage breakdown) — just need to surface in UI
+  - Store session-level totals: total input/output tokens, cache read/creation, total duration
+  - Show in sidebar (per session) and scope bar (per agent)
+  - New `getSessionUsage` command for the two-way hook pattern
 - [ ] Add a toggle icon in top right of Top Nav for a Logs view
   - Logs view should just show the raw events and payloads for the selected project or session
   - User can toggle between the "normal" view and raw logs
