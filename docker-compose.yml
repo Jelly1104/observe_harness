@@ -10,12 +10,4 @@ services:
       - "${SERVER_PORT:-4001}:4001"
       - "${CLIENT_PORT:-5174}:5174"
     volumes:
-      - ./app/server:/app/app/server
-      - ./app/client:/app/app/client
-      - server_node_modules:/app/app/server/node_modules
-      - client_node_modules:/app/app/client/node_modules
       - ./data:/data
-
-volumes:
-  server_node_modules:
-  client_node_modules:
