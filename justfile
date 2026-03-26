@@ -6,6 +6,8 @@ set quiet
 
 port := env("SERVER_PORT", "4001")
 project_root := justfile_directory()
+server := project_root / "app" / "server"
+client := project_root / "app" / "client"
 
 # List available recipes
 default:
@@ -47,45 +49,47 @@ dev:
     @echo "Server: http://localhost:{{port}}"
     @echo "Client: http://localhost:5174 (Vite dev)"
     @echo ""
-    cd {{project_root}}/app/server && npx tsx watch src/index.ts &
-    cd {{project_root}}/app/client && npm run dev &
+    cd {{server}} && npm run dev &
+    cd {{client}} && npm run dev &
     @wait
 
 # Start only the server (dev mode with hot reload)
 dev-server:
-    cd {{project_root}}/app/server && npx tsx watch src/index.ts
+    cd {{server}} && npm run dev
 
 # Start only the client (Vite dev server)
 dev-client:
-    cd {{project_root}}/app/client && npm run dev
+    cd {{client}} && npm run dev
 
 # Build the client for production
 build:
-    cd {{project_root}}/app/client && npm run build
+    cd {{client}} && npm run build
+
+# ─── Testing ────────────────────────────────────────────
 
 # Run server tests
 test:
-    cd {{project_root}}/app/server && npx vitest run
+    cd {{server}} && npm test
 
 # Run server tests in watch mode
 test-watch:
-    cd {{project_root}}/app/server && npx vitest
-
-# ─── Database ────────────────────────────────────────────
-
-# Delete the events database
-db-reset:
-    rm -f {{project_root}}/data/observe.db {{project_root}}/data/observe.db-wal {{project_root}}/data/observe.db-shm
-    rm -f {{project_root}}/app/server/observe.db {{project_root}}/app/server/observe.db-wal {{project_root}}/app/server/observe.db-shm
-    @echo "Database reset"
-
-# ─── Utilities ───────────────────────────────────────────
+    cd {{server}} && npm run test:watch
 
 # Send a test event to the server
 test-event:
     @echo '{"session_id":"test-1234","hook_event_name":"SessionStart","cwd":"/tmp","source":"new"}' \
       | CLAUDE_OBSERVE_PROJECT_NAME=test-project CLAUDE_OBSERVE_PORT={{port}} node {{project_root}}/app/hooks/send_event.mjs
     @echo "Event sent"
+
+# ─── Database ────────────────────────────────────────────
+
+# Delete the events database
+db-reset:
+    rm -f {{project_root}}/data/observe.db {{project_root}}/data/observe.db-wal {{project_root}}/data/observe.db-shm
+    rm -f {{server}}/observe.db {{server}}/observe.db-wal {{server}}/observe.db-shm
+    @echo "Database reset"
+
+# ─── Utilities ───────────────────────────────────────────
 
 # Check server health
 health:
@@ -99,9 +103,10 @@ open:
 
 # Format all source files
 fmt:
-    npx prettier --write "app/**/*.{ts,tsx,mjs}"
+    cd {{server}} && npm run fmt
+    cd {{client}} && npm run fmt
 
 # Install all dependencies
 install:
-    cd {{project_root}}/app/server && npm install
-    cd {{project_root}}/app/client && npm install
+    cd {{server}} && npm install
+    cd {{client}} && npm install
