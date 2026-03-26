@@ -58,6 +58,14 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
         type = 'tool'
         subtype = 'PostToolUse'
         toolName = hookToolName || null
+        // Extract subagent info from Agent tool response
+        if (toolName === 'Agent') {
+          const toolResponse = raw.tool_response as Record<string, unknown> | undefined
+          if (toolResponse) {
+            subAgentId = (toolResponse.agentId as string) || null
+            subAgentName = (toolInput?.description as string) || null
+          }
+        }
         break
       case 'Stop':
         type = 'system'
@@ -66,6 +74,7 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
       case 'SubagentStop':
         type = 'system'
         subtype = 'SubagentStop'
+        subAgentId = (raw.agent_id as string) || null
         break
       case 'Notification':
         type = 'system'

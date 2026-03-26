@@ -101,6 +101,7 @@ const server = Bun.serve({
         const rootAgentId = ensureRootAgent(parsed.sessionId, parsed.slug, parsed.timestamp)
         let agentId = rootAgentId
 
+        // Create/update subagent records
         if (parsed.subAgentId) {
           upsertAgent(
             parsed.subAgentId,
@@ -110,14 +111,22 @@ const server = Bun.serve({
             parsed.subAgentName,
             parsed.timestamp
           )
+
+          // agent_progress events belong to the subagent
           if (parsed.subtype === 'agent_progress') {
             agentId = parsed.subAgentId
           }
         }
 
+        // Handle stop events
         if (parsed.type === 'system' && parsed.subtype === 'stop_hook_summary') {
           updateAgentStatus(rootAgentId, 'stopped')
           updateSessionStatus(parsed.sessionId, 'stopped')
+        }
+
+        // SubagentStop: mark the subagent as stopped
+        if (parsed.subtype === 'SubagentStop' && parsed.subAgentId) {
+          updateAgentStatus(parsed.subAgentId, 'stopped')
         }
 
         // Set status for tool events
@@ -156,7 +165,7 @@ const server = Bun.serve({
         // Build response — request local data if the server is missing info
         const requests: Array<{ cmd: string; args: Record<string, unknown>; callback: string }> = []
 
-        // Request slug if session doesn't have one yet
+        // Request session slug if missing
         if (parsed.raw.transcript_path) {
           const session = getSessionById(parsed.sessionId)
           if (session && !session.slug) {
@@ -166,6 +175,15 @@ const server = Bun.serve({
               callback: `/api/sessions/${encodeURIComponent(parsed.sessionId)}/metadata`,
             })
           }
+        }
+
+        // On SubagentStop, request subagent slug from its transcript
+        if (parsed.subtype === 'SubagentStop' && parsed.subAgentId && parsed.raw.agent_transcript_path) {
+          requests.push({
+            cmd: 'getSessionSlug',
+            args: { transcript_path: parsed.raw.agent_transcript_path },
+            callback: `/api/agents/${encodeURIComponent(parsed.subAgentId)}/metadata`,
+          })
         }
 
         return json({ ok: true, id: eventId, ...(requests.length > 0 ? { requests } : {}) }, 201)
@@ -193,6 +211,27 @@ const server = Bun.serve({
 
           // Notify clients
           broadcast({ type: 'session_update', data: { id: sessionId, slug: data.slug } as any })
+        }
+
+        return json({ ok: true })
+      } catch {
+        return json({ error: 'Invalid request' }, 400)
+      }
+    }
+
+    // POST /api/agents/:id/metadata — callback from hook with subagent local data
+    const agentMetadataMatch = url.pathname.match(/^\/api\/agents\/([^/]+)\/metadata$/)
+    if (agentMetadataMatch && req.method === 'POST') {
+      try {
+        const agentIdParam = decodeURIComponent(agentMetadataMatch[1])
+        const data = await req.json() as Record<string, unknown>
+
+        if (data.slug && typeof data.slug === 'string') {
+          getDb().prepare('UPDATE agents SET slug = ? WHERE id = ?').run(data.slug, agentIdParam)
+
+          if (LOG_LEVEL === 'debug') {
+            console.log(`[METADATA] Agent ${agentIdParam.slice(0, 8)} slug: ${data.slug}`)
+          }
         }
 
         return json({ ok: true })
