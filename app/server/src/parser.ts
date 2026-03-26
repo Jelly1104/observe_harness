@@ -7,6 +7,7 @@ export interface ParsedRawEvent {
   type: string
   subtype: string | null
   toolName: string | null
+  toolUseId: string | null
   summary: string | null
   timestamp: number
   subAgentId: string | null
@@ -195,6 +196,9 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     if (raw[key] !== undefined) metadata[key] = raw[key];
   }
 
+  // Extract tool_use_id from hook payload
+  const toolUseId = (raw.tool_use_id as string) || null;
+
   return {
     projectName,
     sessionId,
@@ -202,6 +206,7 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
     type,
     subtype,
     toolName,
+    toolUseId,
     summary,
     timestamp,
     subAgentId,

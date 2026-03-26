@@ -66,9 +66,19 @@ export function initDatabase(dbPath?: string): Database {
     )
   `)
 
+  // Migration: add columns if missing (for existing DBs)
+  const cols = db.prepare('PRAGMA table_info(events)').all() as any[]
+  if (!cols.some((c: any) => c.name === 'tool_use_id')) {
+    db.prepare('ALTER TABLE events ADD COLUMN tool_use_id TEXT').run()
+  }
+  if (!cols.some((c: any) => c.name === 'status')) {
+    db.prepare("ALTER TABLE events ADD COLUMN status TEXT DEFAULT 'pending'").run()
+  }
+
   db.exec('CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, timestamp)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_events_agent ON events(agent_id, timestamp)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_events_type ON events(type, subtype)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_events_tool_use_id ON events(tool_use_id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)')
@@ -156,16 +166,18 @@ export function insertEvent(
   toolName: string | null,
   summary: string | null,
   timestamp: number,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  toolUseId?: string | null,
+  status?: string
 ): number {
   const result = getDb()
     .prepare(
       `
-    INSERT INTO events (agent_id, session_id, type, subtype, tool_name, summary, timestamp, payload)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO events (agent_id, session_id, type, subtype, tool_name, summary, timestamp, payload, tool_use_id, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
     )
-    .run(agentId, sessionId, type, subtype, toolName, summary, timestamp, JSON.stringify(payload))
+    .run(agentId, sessionId, type, subtype, toolName, summary, timestamp, JSON.stringify(payload), toolUseId || null, status || 'pending')
 
   return result.lastInsertRowid as number
 }

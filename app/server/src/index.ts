@@ -97,6 +97,11 @@ const server = Bun.serve({
           updateSessionStatus(parsed.sessionId, 'stopped')
         }
 
+        // Set status for tool events
+        let status = 'pending'
+        if (parsed.subtype === 'PreToolUse') status = 'running'
+        else if (parsed.subtype === 'PostToolUse') status = 'completed'
+
         const eventId = insertEvent(
           agentId,
           parsed.sessionId,
@@ -105,7 +110,9 @@ const server = Bun.serve({
           parsed.toolName,
           parsed.summary,
           parsed.timestamp,
-          parsed.raw
+          parsed.raw,
+          parsed.toolUseId,
+          status
         )
 
         const event: ParsedEvent = {
@@ -115,6 +122,8 @@ const server = Bun.serve({
           type: parsed.type,
           subtype: parsed.subtype,
           toolName: parsed.toolName,
+          toolUseId: parsed.toolUseId,
+          status,
           summary: parsed.summary,
           timestamp: parsed.timestamp,
           payload: parsed.raw,
@@ -231,6 +240,8 @@ const server = Bun.serve({
         type: r.type,
         subtype: r.subtype,
         toolName: r.tool_name,
+        toolUseId: r.tool_use_id || null,
+        status: r.status || 'pending',
         summary: r.summary,
         timestamp: r.timestamp,
         payload: JSON.parse(r.payload),
@@ -250,6 +261,8 @@ const server = Bun.serve({
         type: r.type,
         subtype: r.subtype,
         toolName: r.tool_name,
+        toolUseId: r.tool_use_id || null,
+        status: r.status || 'pending',
         summary: r.summary,
         timestamp: r.timestamp,
         payload: JSON.parse(r.payload),
@@ -269,6 +282,8 @@ const server = Bun.serve({
         type: r.type,
         subtype: r.subtype,
         toolName: r.tool_name,
+        toolUseId: r.tool_use_id || null,
+        status: r.status || 'pending',
         summary: r.summary,
         timestamp: r.timestamp,
         payload: JSON.parse(r.payload),

@@ -4,7 +4,7 @@ import { useAgents } from '@/hooks/use-agents';
 import { useUIStore } from '@/stores/ui-store';
 import { useSessions } from '@/hooks/use-sessions';
 import { EventRow } from './event-row';
-import type { Agent } from '@/types';
+import type { Agent, ParsedEvent } from '@/types';
 
 export function EventStream() {
   const {
@@ -37,15 +37,35 @@ export function EventStream() {
     return map;
   }, [agents]);
 
-  const filteredEvents = useMemo(() => {
+  // Dedupe tool events: merge PostToolUse into matching PreToolUse by toolUseId
+  const deduped = useMemo(() => {
     if (!events) return [];
-    if (activeEventTypes.length === 0) return events;
-    return events.filter((e) => {
+    const result: ParsedEvent[] = [];
+    const toolUseMap = new Map<string, number>(); // toolUseId -> index in result
+
+    for (const e of events) {
+      if (e.subtype === 'PreToolUse' && e.toolUseId) {
+        toolUseMap.set(e.toolUseId, result.length);
+        result.push({ ...e }); // copy so we can mutate status
+      } else if (e.subtype === 'PostToolUse' && e.toolUseId && toolUseMap.has(e.toolUseId)) {
+        // Merge into the existing PreToolUse row
+        const idx = toolUseMap.get(e.toolUseId)!;
+        result[idx] = { ...result[idx], status: 'completed' };
+      } else {
+        result.push(e);
+      }
+    }
+    return result;
+  }, [events]);
+
+  const filteredEvents = useMemo(() => {
+    if (activeEventTypes.length === 0) return deduped;
+    return deduped.filter((e) => {
       const matchType = activeEventTypes.includes(e.type);
       const matchSubtype = e.subtype && activeEventTypes.includes(e.subtype);
       return matchType || matchSubtype;
     });
-  }, [events, activeEventTypes]);
+  }, [deduped, activeEventTypes]);
 
   const showAgentLabel = agentMap.size > 1;
 
