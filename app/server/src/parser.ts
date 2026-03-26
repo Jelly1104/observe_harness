@@ -11,6 +11,9 @@ export interface ParsedRawEvent {
   toolName: string | null
   toolUseId: string | null
   timestamp: number
+  // The agent this event belongs to (from payload.agent_id — present on subagent hook events)
+  ownerAgentId: string | null
+  // The subagent being spawned/stopped (from Agent tool response or SubagentStop)
   subAgentId: string | null
   subAgentName: string | null
   metadata: Record<string, unknown>
@@ -23,6 +26,8 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
   const slug = (raw.slug as string) || null
   const timestamp = parseTimestamp(raw.timestamp)
   const toolUseId = (raw.tool_use_id as string) || null
+  // agent_id is present on hook events fired from subagents
+  const ownerAgentId = (raw.agent_id as string) || null
 
   let type: string
   let subtype: string | null = null
@@ -151,7 +156,7 @@ export function parseRawEvent(raw: Record<string, unknown>): ParsedRawEvent {
 
   return {
     projectName, sessionId, slug, type, subtype, toolName, toolUseId,
-    timestamp, subAgentId, subAgentName, metadata, raw,
+    timestamp, ownerAgentId, subAgentId, subAgentName, metadata, raw,
   }
 }
 

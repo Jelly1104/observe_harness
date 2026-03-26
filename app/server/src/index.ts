@@ -99,9 +99,22 @@ const server = Bun.serve({
         )
 
         const rootAgentId = ensureRootAgent(parsed.sessionId, parsed.slug, parsed.timestamp)
-        let agentId = rootAgentId
 
-        // Create/update subagent records
+        // If the event has an ownerAgentId (from payload.agent_id), this event
+        // belongs to that agent. Ensure the agent record exists.
+        if (parsed.ownerAgentId && parsed.ownerAgentId !== rootAgentId) {
+          upsertAgent(
+            parsed.ownerAgentId,
+            parsed.sessionId,
+            rootAgentId,
+            null,
+            null,
+            parsed.timestamp
+          )
+        }
+        let agentId = parsed.ownerAgentId || rootAgentId
+
+        // Create/update subagent records (from Agent tool PostToolUse or SubagentStop)
         if (parsed.subAgentId) {
           upsertAgent(
             parsed.subAgentId,
