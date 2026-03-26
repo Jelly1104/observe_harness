@@ -22,6 +22,8 @@ import type { ParsedEvent, Agent, Session, Project } from './types'
 
 initDatabase()
 
+const LOG_LEVEL = process.env.SERVER_LOG_LEVEL || 'debug'
+
 const PORT = parseInt(process.env.SERVER_PORT || '4001', 10)
 
 const CORS_HEADERS = {
@@ -64,6 +66,16 @@ const server = Bun.serve({
     if (url.pathname === '/api/events' && req.method === 'POST') {
       try {
         const raw = await req.json()
+
+        if (LOG_LEVEL === 'debug') {
+          console.log('[EVENT] Raw payload:', JSON.stringify(raw).slice(0, 500))
+          console.log('[EVENT] Keys:', Object.keys(raw).join(', '))
+          if (raw.hook_event_name) {
+            console.log(`[EVENT] hook=${raw.hook_event_name} tool=${raw.tool_name || '-'} tool_use_id=${raw.tool_use_id || '-'}`)
+            console.log(`[EVENT] has tool_input=${!!raw.tool_input} has tool_response=${!!raw.tool_response}`)
+          }
+        }
+
         const parsed = parseRawEvent(raw)
 
         upsertProject(parsed.projectName, parsed.projectName)
