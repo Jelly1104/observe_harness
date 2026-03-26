@@ -1,0 +1,11 @@
+services:
+  claude-observe:
+    volumes:
+      - ./data:/data
+      - ./app/server/src:/app/app/server/src
+      - ./app/client/src:/app/app/client/src
+      - ./app/client/index.html:/app/app/client/index.html
+    command: >
+      sh -c "cd /app/app/server && bun --hot src/index.ts &
+             cd /app/app/client && npx vite --host 0.0.0.0 --port 5174 &
+             wait"

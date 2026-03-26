@@ -30,18 +30,26 @@ restart: stop start
 logs:
     cd {{project_root}} && docker compose logs -f
 
-# ─── Development (local, no Docker) ─────────────────────
+# ─── Development ─────────────────────────────────────────
 
-# Start server locally
+# Start dev containers (source bind-mounted for hot reload)
+dev:
+    cd {{project_root}} && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    @echo ""
+    @echo "Dashboard: http://localhost:{{client_port}}"
+    @echo "Server:    http://localhost:{{server_port}}"
+    @echo "Logs:      just logs"
+
+# Start server locally (no Docker)
 dev-server:
     cd {{project_root}}/app/server && bun src/index.ts
 
-# Start client locally
+# Start client locally (no Docker)
 dev-client:
     cd {{project_root}}/app/client && npm run dev
 
-# Start both server and client locally
-dev:
+# Start both locally (no Docker)
+dev-local:
     @echo "Starting server and client..."
     cd {{project_root}}/app/server && bun src/index.ts &
     cd {{project_root}}/app/client && npm run dev &
