@@ -38,6 +38,7 @@ export function ScopeBar() {
     setAutoFollow,
     expandedEventIds,
     collapseAllEvents,
+    requestExpandAll,
   } = useUIStore()
   const { data: agents } = useAgents(selectedSessionId)
   const queryClient = useQueryClient()
@@ -132,14 +133,16 @@ export function ScopeBar() {
           onClick={() => {
             if (expandedEventIds.size > 0) {
               collapseAllEvents()
+            } else {
+              requestExpandAll()
             }
           }}
-          title={expandedEventIds.size > 0 ? 'Collapse all rows' : 'No rows expanded'}
+          title={expandedEventIds.size > 0 ? 'Collapse all' : 'Expand all'}
         >
           {expandedEventIds.size > 0 ? (
             <ChevronsDownUp className="h-3.5 w-3.5" />
           ) : (
-            <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+            <ChevronsUpDown className="h-3.5 w-3.5" />
           )}
         </Button>
         <AlertDialog>

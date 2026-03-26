@@ -14,7 +14,8 @@ export function EventStream() {
     activeEventTypes,
     searchQuery,
     autoFollow,
-    setAutoFollow,
+    expandAllCounter,
+    expandAllEvents,
   } = useUIStore()
 
   const { data: sessions } = useSessions(selectedProjectId)
@@ -50,9 +51,9 @@ export function EventStream() {
         toolUseMap.set(e.toolUseId, result.length)
         result.push({ ...e }) // copy so we can mutate status
       } else if (e.subtype === 'PostToolUse' && e.toolUseId && toolUseMap.has(e.toolUseId)) {
-        // Merge: keep PreToolUse row but update status and attach PostToolUse payload
+        // Merge: keep PreToolUse row position but swap in PostToolUse payload (has tool_response)
         const idx = toolUseMap.get(e.toolUseId)!
-        result[idx] = { ...result[idx], status: 'completed', _postPayload: e.payload } as any
+        result[idx] = { ...result[idx], status: 'completed', payload: e.payload }
       } else {
         result.push(e)
       }
@@ -82,12 +83,19 @@ export function EventStream() {
   const showAgentLabel = agentMap.size > 1
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when session changes or new events arrive (if autoFollow is enabled)
+  // Auto-scroll to bottom when new events arrive (if autoFollow is enabled)
   useEffect(() => {
     if (autoFollow && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [autoFollow, filteredEvents.length])
+
+  // Expand all events when requested from the scope bar
+  useEffect(() => {
+    if (expandAllCounter > 0 && filteredEvents.length > 0) {
+      expandAllEvents(filteredEvents.map((e) => e.id))
+    }
+  }, [expandAllCounter])
 
   if (!effectiveSessionId) {
     return (

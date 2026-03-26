@@ -8,6 +8,7 @@
   - We're currently adding in the tool response data but the hook_event_name shows "PreToolUse" which is confusing
   - We should either include both the PreToolUse and PostToolUse payloads as separate objects or simply swap the entire payload for the PostToolUse payload
   - Need to confirm first that the Pre and Post payloads are essentially identical other than the hook name and tool response - if they're nearly identical, then swapping should be fine, otherwise we should show both payloads separately to avoid confusion
+  - The ideal solution here is show full PreToolUse payload until PostToolUse arrives, then swap the payload to PostToolUse - no merging or manipulation, just swapping state in the UI
 
 ---
 

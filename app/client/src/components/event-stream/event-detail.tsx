@@ -31,11 +31,7 @@ export function EventDetail({ event }: EventDetailProps) {
       .finally(() => setLoadingThread(false))
   }, [event.id, showThread])
 
-  const postPayloadObj = (event as any)._postPayload as Record<string, any> | undefined
-  const fullPayload = postPayloadObj
-    ? { request: event.payload, response: postPayloadObj }
-    : event.payload
-  const payloadStr = JSON.stringify(fullPayload, null, 2)
+  const payloadStr = JSON.stringify(event.payload, null, 2)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(payloadStr)
@@ -44,13 +40,12 @@ export function EventDetail({ event }: EventDetailProps) {
   }
 
   const p = event.payload as Record<string, any>
-  const postPayload = (event as any)._postPayload as Record<string, any> | undefined
   const cwd = p.cwd as string | undefined
 
   return (
     <div className="px-4 py-2 bg-muted/30 border-t border-border text-xs space-y-2">
       {/* Per-event-type rich detail */}
-      <ToolDetail event={event} payload={p} postPayload={postPayload} cwd={cwd} thread={thread} />
+      <ToolDetail event={event} payload={p} cwd={cwd} thread={thread} />
 
       {/* Conversation thread for UserPrompt / Stop / SubagentStop events */}
       {showThread && (
@@ -107,19 +102,16 @@ export function EventDetail({ event }: EventDetailProps) {
 function ToolDetail({
   event,
   payload,
-  postPayload,
   cwd,
   thread,
 }: {
   event: ParsedEvent
   payload: Record<string, any>
-  postPayload?: Record<string, any>
   cwd?: string
   thread?: ParsedEvent[] | null
 }) {
   const ti = payload.tool_input || {}
-  const toolResponse = postPayload?.tool_response
-  const result = extractResult(toolResponse)
+  const result = extractResult(payload.tool_response)
 
   // For non-tool events, show basic info
   if (event.subtype === 'UserPromptSubmit') {

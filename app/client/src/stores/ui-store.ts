@@ -48,8 +48,10 @@ interface UIState {
 
   expandedEventIds: Set<number>
   scrollToEventId: number | null
+  expandAllCounter: number // incremented to signal "expand all" to event stream
   toggleExpandedEvent: (id: number) => void
   collapseAllEvents: () => void
+  requestExpandAll: () => void
   expandAllEvents: (ids: number[]) => void
   setScrollToEventId: (id: number | null) => void
 
@@ -114,7 +116,10 @@ export const useUIStore = create<UIState>((set, get) => ({
       // Disable auto-follow when expanding a row
       return { expandedEventIds: next, ...(isExpanding ? { autoFollow: false } : {}) }
     }),
+  expandAllCounter: 0,
   collapseAllEvents: () => set({ expandedEventIds: new Set() }),
+  requestExpandAll: () =>
+    set((s) => ({ expandAllCounter: s.expandAllCounter + 1, autoFollow: false })),
   expandAllEvents: (ids: number[]) => set({ expandedEventIds: new Set(ids), autoFollow: false }),
   setScrollToEventId: (id) => set({ scrollToEventId: id }),
 
