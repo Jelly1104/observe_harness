@@ -115,21 +115,26 @@ Start a Claude Code session in your configured project. Events will stream into 
 If you have [just](https://github.com/casey/just) installed:
 
 ```bash
+# Local Dev Commands:
 just install      # Install all dependencies
 just dev          # Start server + client in dev mode (hot reload)
 just dev-server   # Start only the server
 just dev-client   # Start only the client
+just test         # Run server tests
+just test-watch   # Run server tests in watch mode
+just test-event   # Send a test event to the server
+just fmt          # Format all source files
+
+# Docker Container Commands:
 just start        # Start production containers (Docker, detached)
 just stop         # Stop Docker containers
 just restart      # Restart Docker containers
 just logs         # Follow Docker container logs
-just test         # Run server tests
-just test-watch   # Run server tests in watch mode
-just test-event   # Send a test event to the server
+
+# Shared Commands:
 just health       # Check server health
 just db-reset     # Delete the events database
 just open         # Open the dashboard in browser
-just fmt          # Format all source files
 ```
 
 ## Project structure
@@ -172,6 +177,8 @@ app/
 In dev mode, the client and server run as separate processes with separate ports.
 
 In production or docker mode, the client is bundled and served by the server. Both the API and dashboard are served from the same process and port.
+
+Both local dev and Docker flows default to using the same sqlite database in ./data. The database is auto created as needed.
 
 ## Acknowledgements
 
