@@ -105,7 +105,7 @@ function ToolDetail({
 }) {
   const ti = payload.tool_input || {};
   const toolResponse = postPayload?.tool_response;
-  const result = toolResponse?.stdout || toolResponse?.content || (typeof toolResponse === 'string' ? toolResponse : null);
+  const result = extractResult(toolResponse);
 
   // For non-tool events, show basic info
   if (event.subtype === 'UserPromptSubmit') {
@@ -237,15 +237,41 @@ function DetailCode({ label, value }: { label: string; value?: string }) {
   );
 }
 
+// Extract a display string from tool_response, handling different formats:
+// - Bash: { stdout, stderr }
+// - MCP tools: [{ type: 'text', text: '...' }]
+// - String: direct text
+function extractResult(toolResponse: any): string | null {
+  if (!toolResponse) return null;
+  if (typeof toolResponse === 'string') return toolResponse;
+
+  // Bash format: { stdout, stderr }
+  if (toolResponse.stdout !== undefined) {
+    const parts = [];
+    if (toolResponse.stdout) parts.push(toolResponse.stdout);
+    if (toolResponse.stderr) parts.push(`stderr: ${toolResponse.stderr}`);
+    return parts.join('\n') || null;
+  }
+
+  // MCP format: array of content blocks [{ type: 'text', text: '...' }]
+  if (Array.isArray(toolResponse)) {
+    const text = toolResponse
+      .map((r: any) => {
+        if (typeof r === 'string') return r;
+        if (r?.type === 'text' && r?.text) return r.text;
+        return JSON.stringify(r);
+      })
+      .join('\n');
+    return text || null;
+  }
+
+  // Other object: try content field or stringify
+  if (toolResponse.content) return String(toolResponse.content);
+  return JSON.stringify(toolResponse, null, 2);
+}
+
 function formatResult(result: any): string {
   if (typeof result === 'string') return result;
-  if (Array.isArray(result)) {
-    return result.map((r: any) => {
-      if (typeof r === 'string') return r;
-      if (r?.type === 'text' && r?.text) return r.text;
-      return JSON.stringify(r);
-    }).join('\n');
-  }
   return JSON.stringify(result, null, 2);
 }
 
