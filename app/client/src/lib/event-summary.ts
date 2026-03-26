@@ -3,7 +3,9 @@
 
 import type { ParsedEvent } from '@/types';
 
-export function getEventSummary(event: ParsedEvent): string {
+// allEvents is optional — pass it when the full event list is available
+// so Stop events can look up the preceding prompt.
+export function getEventSummary(event: ParsedEvent, allEvents?: ParsedEvent[]): string {
   const p = event.payload as Record<string, any>;
   const cwd = p.cwd as string | undefined;
 
@@ -15,7 +17,7 @@ export function getEventSummary(event: ParsedEvent): string {
       return p.source ? `Session ${p.source}` : 'New session';
 
     case 'Stop':
-      return 'Session stopped';
+      return getStopSummary(event, allEvents);
 
     case 'SubagentStop':
       return 'Subagent stopped';
@@ -78,6 +80,33 @@ function getToolSummary(
     default:
       return toolInput.description || toolInput.command || toolInput.query || '';
   }
+}
+
+function getStopSummary(event: ParsedEvent, allEvents?: ParsedEvent[]): string {
+  const p = event.payload as Record<string, any>;
+  const lastMsg = p.last_assistant_message as string | undefined;
+
+  // Find the preceding UserPromptSubmit
+  let prompt: string | undefined;
+  if (allEvents) {
+    const idx = allEvents.findIndex((e) => e.id === event.id);
+    if (idx > 0) {
+      for (let i = idx - 1; i >= 0; i--) {
+        if (allEvents[i].subtype === 'UserPromptSubmit') {
+          const pp = allEvents[i].payload as Record<string, any>;
+          prompt = pp.prompt || pp.message?.content;
+          break;
+        }
+      }
+    }
+  }
+
+  const parts: string[] = [];
+  if (prompt) parts.push(`Prompt: "${prompt}"`);
+  if (lastMsg) parts.push(`Final: "${lastMsg}"`);
+
+  if (parts.length > 0) return parts.join(' → ');
+  return 'Session stopped';
 }
 
 // Strip cwd prefix to show relative paths

@@ -92,6 +92,7 @@ export function EventStream() {
           <EventRow
             key={event.id}
             event={event}
+            allEvents={filteredEvents}
             agentMap={agentMap}
             showAgentLabel={showAgentLabel}
           />
