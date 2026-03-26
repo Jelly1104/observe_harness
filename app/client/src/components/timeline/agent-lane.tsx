@@ -1,6 +1,7 @@
 import { useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { getEventIcon } from '@/config/event-icons';
+import { getEventSummary } from '@/lib/event-summary';
 import { useUIStore } from '@/stores/ui-store';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { ParsedEvent } from '@/types';
@@ -72,7 +73,7 @@ export function AgentLane({ agentName, events, isSubagent, color }: AgentLanePro
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
                 <div>{event.subtype || event.type}</div>
-                {event.summary && <div className="text-muted-foreground">{event.summary}</div>}
+                {getEventSummary(event) && <div className="text-muted-foreground">{getEventSummary(event)}</div>}
               </TooltipContent>
             </Tooltip>
           );

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '@/lib/api-client';
 import { getEventIcon } from '@/config/event-icons';
+import { getEventSummary } from '@/lib/event-summary';
 import { cn } from '@/lib/utils';
 import type { ParsedEvent } from '@/types';
 
@@ -107,9 +108,7 @@ function ThreadEvent({ event, isCurrentEvent }: { event: ParsedEvent; isCurrentE
       <span className="text-xs shrink-0">{icon}</span>
       <span className="w-24 shrink-0 truncate">{event.subtype || event.type}</span>
       <span className="truncate flex-1">
-        {event.toolName && event.summary
-          ? `${event.toolName} — ${event.summary}`
-          : event.summary || ''}
+        {getEventSummary(event)}
       </span>
       <span className="text-[9px] text-muted-foreground/50 tabular-nums shrink-0">
         {new Date(event.timestamp).toLocaleTimeString('en-US', {

@@ -40,7 +40,6 @@ export interface ParsedEvent {
   toolName: string | null;
   toolUseId: string | null;
   status: string;
-  summary: string | null;
   timestamp: number;
   payload: Record<string, unknown>;
 }

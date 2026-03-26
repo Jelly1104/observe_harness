@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { getEventIcon } from '@/config/event-icons';
+import { getEventSummary } from '@/lib/event-summary';
 import { useUIStore } from '@/stores/ui-store';
 import { EventDetail } from './event-detail';
 import type { ParsedEvent, Agent } from '@/types';
@@ -60,7 +61,7 @@ export function EventRow({ event, agentMap, showAgentLabel }: EventRowProps) {
   };
   const rawLabel = isTool ? 'Tool' : (event.subtype || event.type);
   const displayLabel = LABEL_MAP[rawLabel] || rawLabel;
-  const displaySummary = event.summary || '';
+  const displaySummary = getEventSummary(event);
 
   useEffect(() => {
     if (scrollToEventId === event.id && rowRef.current) {

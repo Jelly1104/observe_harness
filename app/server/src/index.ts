@@ -108,7 +108,7 @@ const server = Bun.serve({
           parsed.type,
           parsed.subtype,
           parsed.toolName,
-          parsed.summary,
+          null, // summary — computed client-side
           parsed.timestamp,
           parsed.raw,
           parsed.toolUseId,
@@ -124,7 +124,6 @@ const server = Bun.serve({
           toolName: parsed.toolName,
           toolUseId: parsed.toolUseId,
           status,
-          summary: parsed.summary,
           timestamp: parsed.timestamp,
           payload: parsed.raw,
         }
@@ -242,7 +241,6 @@ const server = Bun.serve({
         toolName: r.tool_name,
         toolUseId: r.tool_use_id || null,
         status: r.status || 'pending',
-        summary: r.summary,
         timestamp: r.timestamp,
         payload: JSON.parse(r.payload),
       }))
@@ -263,7 +261,6 @@ const server = Bun.serve({
         toolName: r.tool_name,
         toolUseId: r.tool_use_id || null,
         status: r.status || 'pending',
-        summary: r.summary,
         timestamp: r.timestamp,
         payload: JSON.parse(r.payload),
       }))
@@ -284,7 +281,6 @@ const server = Bun.serve({
         toolName: r.tool_name,
         toolUseId: r.tool_use_id || null,
         status: r.status || 'pending',
-        summary: r.summary,
         timestamp: r.timestamp,
         payload: JSON.parse(r.payload),
       }))
