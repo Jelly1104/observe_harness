@@ -4,10 +4,6 @@ import { cors } from 'hono/cors'
 import { serveStatic } from '@hono/node-server/serve-static'
 import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 import type { EventStore } from './storage/types'
 
 import eventsRouter from './routes/events'
@@ -38,18 +34,14 @@ export function createApp(store: EventStore, broadcast: (msg: object) => void) {
   app.route('/api', adminRouter)
   app.route('/api', pollRouter)
 
-  // Serve built client static files (production mode)
-  const clientDistPath = path.join(__dirname, '../../client/dist')
-  if (fs.existsSync(clientDistPath)) {
-    // Serve static assets
+  // Serve built client static files when CLIENT_DIST_PATH is set
+  const clientDistPath = process.env.CLIENT_DIST_PATH
+  if (clientDistPath && fs.existsSync(clientDistPath)) {
     app.use('/*', serveStatic({ root: path.relative(process.cwd(), clientDistPath) }))
 
     // SPA fallback: serve index.html for all non-API routes
-    app.get('*', (c) => {
-      const indexPath = path.join(clientDistPath, 'index.html')
-      const html = fs.readFileSync(indexPath, 'utf8')
-      return c.html(html)
-    })
+    const indexHtml = fs.readFileSync(path.join(clientDistPath, 'index.html'), 'utf8')
+    app.get('*', (c) => c.html(indexHtml))
   }
 
   return app

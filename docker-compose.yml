@@ -6,6 +6,7 @@ services:
     environment:
       SERVER_PORT: "4001"
       DB_PATH: /data/observe.db
+      CLIENT_DIST_PATH: /app/app/client/dist
       ENABLE_WEBSOCKET: "true"
       SERVER_LOG_LEVEL: "debug"
     ports:
