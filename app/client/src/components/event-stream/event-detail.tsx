@@ -118,9 +118,9 @@ function ToolDetail({
 
   if (event.subtype === 'Stop') {
     return (
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         {payload.last_assistant_message && (
-          <DetailRow label="Final message" value={payload.last_assistant_message} multiline />
+          <DetailCode label="Final" value={stripMarkdown(payload.last_assistant_message)} />
         )}
       </div>
     );
@@ -207,14 +207,22 @@ function ToolDetail({
 
 // ── Helper components ──────────────────────────────────────
 
-function DetailRow({ label, value, multiline }: { label: string; value?: string; multiline?: boolean }) {
+function DetailRow({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
-    <div className={cn('flex gap-2', multiline && 'flex-col')}>
+    <div className="flex gap-2">
       <span className="text-muted-foreground shrink-0 w-20 text-right">{label}:</span>
-      <span className={cn(multiline ? 'whitespace-pre-line' : 'truncate')}>{value}</span>
+      <span className="truncate">{value}</span>
     </div>
   );
+}
+
+function stripMarkdown(s: string): string {
+  return s
+    .replace(/\*\*(.*?)\*\*/g, '$1')  // **bold** → bold
+    .replace(/`([^`]+)`/g, '$1')       // `code` → code
+    .replace(/^[-*] /gm, '• ')         // list items
+    .trim();
 }
 
 function DetailCode({ label, value }: { label: string; value?: string }) {
