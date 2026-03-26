@@ -52,10 +52,17 @@ const commands = {
   getSessionSlug({ transcript_path }) {
     if (!transcript_path) return null;
     try {
+      // Read file and scan line by line for first slug reference
       const content = readFileSync(transcript_path, 'utf8');
-      // Slug is on the first line with a "slug" field
-      for (const line of content.split('\n').slice(0, 20)) {
-        if (!line.trim()) continue;
+      let pos = 0;
+      while (pos < content.length) {
+        const nextNewline = content.indexOf('\n', pos);
+        const end = nextNewline === -1 ? content.length : nextNewline;
+        const line = content.slice(pos, end).trim();
+        pos = end + 1;
+        if (!line) continue;
+        // Quick check before parsing — skip lines without "slug"
+        if (!line.includes('"slug"')) continue;
         try {
           const entry = JSON.parse(line);
           if (entry.slug) return { slug: entry.slug };

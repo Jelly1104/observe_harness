@@ -153,16 +153,19 @@ const server = Bun.serve({
 
         broadcast({ type: 'event', data: event })
 
-        // Build response — may include requests for local data
+        // Build response — request local data if the server is missing info
         const requests: Array<{ cmd: string; args: Record<string, unknown>; callback: string }> = []
 
-        // On SessionStart, request the slug if we don't have it
-        if (parsed.subtype === 'SessionStart' && parsed.raw.transcript_path) {
-          requests.push({
-            cmd: 'getSessionSlug',
-            args: { transcript_path: parsed.raw.transcript_path },
-            callback: `/api/sessions/${encodeURIComponent(parsed.sessionId)}/metadata`,
-          })
+        // Request slug if session doesn't have one yet
+        if (parsed.raw.transcript_path) {
+          const session = getSessionById(parsed.sessionId)
+          if (session && !session.slug) {
+            requests.push({
+              cmd: 'getSessionSlug',
+              args: { transcript_path: parsed.raw.transcript_path },
+              callback: `/api/sessions/${encodeURIComponent(parsed.sessionId)}/metadata`,
+            })
+          }
         }
 
         return json({ ok: true, id: eventId, ...(requests.length > 0 ? { requests } : {}) }, 201)
