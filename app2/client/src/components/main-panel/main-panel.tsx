@@ -1,6 +1,7 @@
 import { useUIStore } from '@/stores/ui-store';
 import { ScopeBar } from './scope-bar';
 import { EventFilterBar } from './event-filter-bar';
+import { ActivityTimeline } from '@/components/timeline/activity-timeline';
 import { EventStream } from '@/components/event-stream/event-stream';
 
 export function MainPanel() {
@@ -18,7 +19,7 @@ export function MainPanel() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <ScopeBar />
       <EventFilterBar />
-      {/* ActivityTimeline will be inserted here in Task 11 */}
+      <ActivityTimeline />
       <EventStream />
     </div>
   );
