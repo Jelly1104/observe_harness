@@ -72,10 +72,9 @@ export function ScopeBar() {
   })
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-border min-h-[40px] flex-wrap">
-      <span className="text-xs text-muted-foreground">Agents:</span>
-
-      <div className="flex items-center gap-1 flex-wrap">
+    <div className="flex items-start gap-2 px-3 py-2 border-b border-border min-h-[40px]">
+      <div className="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+        <span className="text-xs text-muted-foreground">Agents:</span>
         {sortedAgents.map((agent) => {
           const isSubagent = agent.parentAgentId !== null
           const isSelected = selectedAgentIds.includes(agent.id)
@@ -117,7 +116,7 @@ export function ScopeBar() {
         )}
       </div>
 
-      <div className="flex items-center gap-1 ml-auto">
+      <div className="flex items-center gap-1 shrink-0">
         <Button
           variant={autoFollow ? 'default' : 'ghost'}
           size="icon"

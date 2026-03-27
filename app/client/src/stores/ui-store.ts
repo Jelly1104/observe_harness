@@ -35,10 +35,12 @@ interface UIState {
   toggleAgentId: (id: string) => void
   removeAgentId: (id: string) => void
 
-  activeEventTypes: string[]
+  activeStaticFilters: string[] // labels from STATIC_FILTERS
+  activeToolFilters: string[] // tool names from dynamic filters
   searchQuery: string
-  setActiveEventTypes: (types: string[]) => void
-  toggleEventType: (type: string) => void
+  toggleStaticFilter: (label: string) => void
+  toggleToolFilter: (toolName: string) => void
+  clearAllFilters: () => void
   setSearchQuery: (query: string) => void
 
   timelineHeight: number
@@ -89,15 +91,22 @@ export const useUIStore = create<UIState>((set, get) => ({
   removeAgentId: (id) =>
     set((s) => ({ selectedAgentIds: s.selectedAgentIds.filter((a) => a !== id) })),
 
-  activeEventTypes: [],
+  activeStaticFilters: [],
+  activeToolFilters: [],
   searchQuery: '',
-  setActiveEventTypes: (types) => set({ activeEventTypes: types }),
-  toggleEventType: (type) =>
+  toggleStaticFilter: (label) =>
     set((s) => ({
-      activeEventTypes: s.activeEventTypes.includes(type)
-        ? s.activeEventTypes.filter((t) => t !== type)
-        : [...s.activeEventTypes, type],
+      activeStaticFilters: s.activeStaticFilters.includes(label)
+        ? s.activeStaticFilters.filter((l) => l !== label)
+        : [...s.activeStaticFilters, label],
     })),
+  toggleToolFilter: (toolName) =>
+    set((s) => ({
+      activeToolFilters: s.activeToolFilters.includes(toolName)
+        ? s.activeToolFilters.filter((t) => t !== toolName)
+        : [...s.activeToolFilters, toolName],
+    })),
+  clearAllFilters: () => set({ activeStaticFilters: [], activeToolFilters: [] }),
   setSearchQuery: (query) => set({ searchQuery: query }),
 
   timelineHeight: 150,

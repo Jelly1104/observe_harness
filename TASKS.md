@@ -1,7 +1,16 @@
 # TASKS
 
+## QUEUED TASKS
+
+Client UI:
+
+- [ ] Add summary & expanded summary for all 25 hooks in the UI
+
 ## COMPLETED TASKS
 
+- [x] Create a new file that maps hook names to filters, e.g.:
+- [x] In the filter bar, split the filters into two rows (static & dynamic)
+- [x] Add support for selecting multiple filters
 - [x] Make agent chips clickable to filter by agent
 - [x] Show the cwd for the session underneath the session in the sidebar
 - [x] Make the Activity Timeline pane vertically resizable

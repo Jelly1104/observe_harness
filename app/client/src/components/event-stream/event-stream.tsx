@@ -2,31 +2,28 @@ import { useMemo, useRef, useEffect } from 'react'
 import { useEvents } from '@/hooks/use-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useUIStore } from '@/stores/ui-store'
-import { useSessions } from '@/hooks/use-sessions'
 import { EventRow } from './event-row'
+import { eventMatchesFilters } from '@/config/filters'
 import type { Agent, ParsedEvent } from '@/types'
 
 export function EventStream() {
   const {
-    selectedProjectId,
     selectedSessionId,
     selectedAgentIds,
-    activeEventTypes,
+    activeStaticFilters,
+    activeToolFilters,
     searchQuery,
     autoFollow,
     expandAllCounter,
     expandAllEvents,
   } = useUIStore()
 
-  const { data: sessions } = useSessions(selectedProjectId)
-  const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null
-
-  const { data: events } = useEvents(effectiveSessionId, {
+  const { data: events } = useEvents(selectedSessionId, {
     agentIds: selectedAgentIds.length > 0 ? selectedAgentIds : undefined,
     search: searchQuery || undefined,
   })
 
-  const { data: agents } = useAgents(effectiveSessionId)
+  const { data: agents } = useAgents(selectedSessionId)
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>()
@@ -62,23 +59,9 @@ export function EventStream() {
   }, [events])
 
   const filteredEvents = useMemo(() => {
-    if (activeEventTypes.length === 0) return deduped
-    return deduped.filter((e) => {
-      for (const filter of activeEventTypes) {
-        // tool:ToolName — match by tool name (including MCP prefix match)
-        if (filter.startsWith('tool:')) {
-          const toolFilter = filter.slice(5)
-          if (e.toolName === toolFilter) return true
-          // MCP prefix match: tool:mcp__chrome-devtools matches mcp__chrome-devtools__click
-          if (e.toolName?.startsWith(toolFilter + '__')) return true
-          continue
-        }
-        // Match by type or subtype
-        if (e.type === filter || e.subtype === filter) return true
-      }
-      return false
-    })
-  }, [deduped, activeEventTypes])
+    if (activeStaticFilters.length === 0 && activeToolFilters.length === 0) return deduped
+    return deduped.filter((e) => eventMatchesFilters(e, activeStaticFilters, activeToolFilters))
+  }, [deduped, activeStaticFilters, activeToolFilters])
 
   const showAgentLabel = agentMap.size > 1
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -97,7 +80,7 @@ export function EventStream() {
     }
   }, [expandAllCounter])
 
-  if (!effectiveSessionId) {
+  if (!selectedSessionId) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
         Select a project to view events
