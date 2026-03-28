@@ -4,6 +4,7 @@ import { EventFilterBar } from './event-filter-bar'
 import { ActivityTimeline } from '@/components/timeline/activity-timeline'
 import { EventStream } from '@/components/event-stream/event-stream'
 import { HomePage } from './home-page'
+import { ProjectPage } from './project-page'
 
 export function MainPanel() {
   const { selectedProjectId, selectedSessionId } = useUIStore()
@@ -13,11 +14,7 @@ export function MainPanel() {
   }
 
   if (!selectedSessionId) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        Select a session from the sidebar
-      </div>
-    )
+    return <ProjectPage />
   }
 
   return (

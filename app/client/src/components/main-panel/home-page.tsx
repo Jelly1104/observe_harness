@@ -1,34 +1,8 @@
 import { useRecentSessions } from '@/hooks/use-recent-sessions'
-import { useUIStore } from '@/stores/ui-store'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
-import { Clock, Folder, Activity } from 'lucide-react'
-
-function formatRelativeTime(ts: number): string {
-  const diff = Date.now() - ts
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return `${Math.floor(days / 30)}mo ago`
-}
-
-function shortenCwd(cwd: string): string {
-  return cwd.replace(/^\/(?:Users|home)\/[^/]+/, '~')
-}
+import { SessionList } from './session-list'
 
 export function HomePage() {
   const { data: sessions, isLoading } = useRecentSessions(30)
-  const { setSelectedProjectId, setSelectedSessionId } = useUIStore()
-
-  const handleSessionClick = (projectId: string, sessionId: string) => {
-    setSelectedProjectId(projectId)
-    // Need a small delay so the project selection propagates before session
-    setTimeout(() => setSelectedSessionId(sessionId), 0)
-  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -44,85 +18,8 @@ export function HomePage() {
             Loading...
           </div>
         )}
-        {!isLoading && (!sessions || sessions.length === 0) && (
-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
-            <Activity className="h-8 w-8 opacity-30" />
-            <span className="text-sm">No sessions yet</span>
-            <span className="text-xs">Sessions will appear here as agents connect</span>
-          </div>
-        )}
-        {sessions && sessions.length > 0 && (
-          <div className="divide-y divide-border">
-            {sessions.map((session) => {
-              const label = session.slug || session.id.slice(0, 8)
-              const cwd =
-                typeof session.metadata?.cwd === 'string'
-                  ? session.metadata.cwd
-                  : null
-              const activeAgents = session.activeAgentCount ?? 0
-              const lastTime = session.lastActivity || session.startedAt
-
-              return (
-                <button
-                  key={session.id}
-                  className={cn(
-                    'w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors',
-                    'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                  )}
-                  onClick={() =>
-                    handleSessionClick(session.projectId, session.id)
-                  }
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={cn(
-                        'h-2 w-2 shrink-0 rounded-full',
-                        session.status === 'active'
-                          ? 'bg-green-500'
-                          : 'bg-muted-foreground/60 dark:bg-muted-foreground/40',
-                      )}
-                    />
-                    <span className="text-sm font-medium truncate">
-                      {label}
-                    </span>
-                    <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                      {activeAgents > 0 && (
-                        <Badge
-                          variant="secondary"
-                          className="text-[10px] h-4 px-1.5 border-green-500/30"
-                        >
-                          {activeAgents} active
-                        </Badge>
-                      )}
-                      {session.eventCount != null && session.eventCount > 0 && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] h-4 px-1.5"
-                        >
-                          {session.eventCount} events
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1 min-w-0">
-                      <Folder className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{session.projectName}</span>
-                    </span>
-                    {cwd && (
-                      <span className="truncate text-muted-foreground/80 dark:text-muted-foreground/60">
-                        {shortenCwd(cwd)}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1 ml-auto shrink-0">
-                      <Clock className="h-3 w-3" />
-                      {formatRelativeTime(lastTime)}
-                    </span>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+        {!isLoading && sessions && (
+          <SessionList sessions={sessions} showProject />
         )}
       </div>
     </div>

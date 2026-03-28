@@ -122,6 +122,19 @@ export function EventStream() {
 
   const showAgentLabel = agentMap.size > 1
   const scrollRef = useRef<HTMLDivElement>(null)
+  const hasInitiallyScrolled = useRef(false)
+
+  // Auto-scroll to bottom on first load of a session
+  useEffect(() => {
+    hasInitiallyScrolled.current = false
+  }, [selectedSessionId])
+
+  useEffect(() => {
+    if (!hasInitiallyScrolled.current && filteredEvents.length > 0 && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      hasInitiallyScrolled.current = true
+    }
+  }, [filteredEvents.length])
 
   // Auto-scroll to bottom when new events arrive (if autoFollow is enabled)
   useEffect(() => {

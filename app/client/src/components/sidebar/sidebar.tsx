@@ -56,11 +56,16 @@ export function Sidebar({ connected }: SidebarProps) {
         )}
       >
         {!sidebarCollapsed && (
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
-            O
-          </div>
+          <button
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => { useUIStore.getState().setSelectedProjectId(null) }}
+          >
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
+              O
+            </div>
+            <span className="text-sm font-semibold truncate">Observe</span>
+          </button>
         )}
-        {!sidebarCollapsed && <span className="text-sm font-semibold truncate">Observe</span>}
         {!sidebarCollapsed && <div className="flex-1" />}
         <Button
           variant="ghost"
