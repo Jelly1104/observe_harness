@@ -93,7 +93,7 @@ function groupSessionsByDate(sessions: Session[]): SessionGroup[] {
 
 export function ProjectList({ collapsed }: ProjectListProps) {
   const { data: projects } = useProjects()
-  const { selectedProjectId, setSelectedProjectId } = useUIStore()
+  const { selectedProjectId, setSelectedProject } = useUIStore()
   const queryClient = useQueryClient()
 
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null)
@@ -159,7 +159,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                         ? 'bg-primary/10 text-primary border border-primary/30'
                         : 'text-muted-foreground hover:bg-accent',
                     )}
-                    onClick={() => setSelectedProjectId(isSelected ? null : project.id)}
+                    onClick={() => setSelectedProject(isSelected ? null : project.id, isSelected ? null : project.slug)}
                   >
                     {displayLabel.charAt(0).toUpperCase()}
                   </button>
@@ -176,7 +176,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                   'group flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm transition-colors',
                   isSelected ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-accent',
                 )}
-                onClick={() => !isEditingThis && setSelectedProjectId(isSelected ? null : project.id)}
+                onClick={() => !isEditingThis && setSelectedProject(isSelected ? null : project.id, isSelected ? null : project.slug)}
               >
                 {isSelected ? (
                   <ChevronDown className="h-3.5 w-3.5 shrink-0" />

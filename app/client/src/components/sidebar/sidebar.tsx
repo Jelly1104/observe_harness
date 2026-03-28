@@ -68,7 +68,7 @@ export function Sidebar({ connected }: SidebarProps) {
         {!sidebarCollapsed && (
           <button
             className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-            onClick={() => { useUIStore.getState().setSelectedProjectId(null) }}
+            onClick={() => { useUIStore.getState().setSelectedProject(null) }}
           >
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
               O

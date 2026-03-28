@@ -19,7 +19,7 @@ import { Trash2, DatabaseZap } from 'lucide-react'
 export function ProjectsTab() {
   const { data: projects, isLoading } = useProjects()
   const queryClient = useQueryClient()
-  const { selectedProjectId, setSelectedProjectId } = useUIStore()
+  const { selectedProjectId, setSelectedProject } = useUIStore()
 
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'project'; id: number; name: string } | { type: 'all' } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -30,7 +30,7 @@ export function ProjectsTab() {
       await api.deleteProject(projectId)
       // If the deleted project was selected, clear selection
       if (selectedProjectId === projectId) {
-        setSelectedProjectId(null)
+        setSelectedProject(null)
       }
       await queryClient.invalidateQueries({ queryKey: ['projects'] })
       await queryClient.invalidateQueries({ queryKey: ['sessions'] })
@@ -46,7 +46,7 @@ export function ProjectsTab() {
     try {
       await api.deleteAllData()
       // Clear all selection state
-      setSelectedProjectId(null)
+      setSelectedProject(null)
       await queryClient.invalidateQueries()
     } finally {
       setDeleting(false)

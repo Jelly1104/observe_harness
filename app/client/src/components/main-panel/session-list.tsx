@@ -26,10 +26,10 @@ interface SessionListProps {
 }
 
 export function SessionList({ sessions, showProject = false }: SessionListProps) {
-  const { setSelectedProjectId, setSelectedSessionId } = useUIStore()
+  const { setSelectedProject, setSelectedSessionId } = useUIStore()
 
-  const handleSessionClick = (projectId: number, sessionId: string) => {
-    setSelectedProjectId(projectId)
+  const handleSessionClick = (projectId: number, projectSlug: string, sessionId: string) => {
+    setSelectedProject(projectId, projectSlug)
     setTimeout(() => setSelectedSessionId(sessionId), 0)
   }
 
@@ -63,7 +63,7 @@ export function SessionList({ sessions, showProject = false }: SessionListProps)
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             )}
             onClick={() =>
-              handleSessionClick(session.projectId, session.id)
+              handleSessionClick(session.projectId, 'projectSlug' in session ? session.projectSlug : '', session.id)
             }
           >
             <div className="flex items-center gap-2 min-w-0">

@@ -1,26 +1,26 @@
 import { create } from 'zustand'
 
-function parseHash(): { projectId: number | null; sessionId: string | null } {
+function parseHash(): { projectSlug: string | null; sessionId: string | null } {
   const hash = window.location.hash.slice(1)
-  if (!hash || hash === '/') return { projectId: null, sessionId: null }
+  if (!hash || hash === '/') return { projectSlug: null, sessionId: null }
   const parts = hash.split('/').filter(Boolean)
   if (parts.length === 1) {
-    return { projectId: null, sessionId: parts[0] }
+    // Could be a session ID or a project slug — treat as session ID
+    return { projectSlug: null, sessionId: parts[0] }
   }
   if (parts.length >= 2) {
-    const maybeProjectId = Number(parts[0])
-    if (!isNaN(maybeProjectId)) {
-      return { projectId: maybeProjectId, sessionId: parts[1] }
-    }
-    // Legacy string project ID - just use the session
-    return { projectId: null, sessionId: parts[1] }
+    return { projectSlug: parts[0], sessionId: parts[1] }
   }
-  return { projectId: null, sessionId: null }
+  return { projectSlug: null, sessionId: null }
 }
 
-function updateHash(projectId: number | null, sessionId: string | null) {
+function updateHash(projectSlug: string | null, sessionId: string | null) {
   let hash = '/'
-  if (sessionId) {
+  if (projectSlug && sessionId) {
+    hash = `/${projectSlug}/${sessionId}`
+  } else if (projectSlug) {
+    hash = `/${projectSlug}`
+  } else if (sessionId) {
     hash = `/${sessionId}`
   }
   window.history.replaceState(null, '', `#${hash}`)
@@ -45,10 +45,12 @@ interface UIState {
   setSidebarWidth: (width: number) => void
 
   selectedProjectId: number | null
+  selectedProjectSlug: string | null
   selectedSessionId: string | null
   selectedAgentIds: string[]
-  setSelectedProjectId: (id: number | null) => void
+  setSelectedProject: (id: number | null, slug?: string | null) => void
   setSelectedSessionId: (id: string | null) => void
+  updateProjectSlug: (slug: string) => void
   setSelectedAgentIds: (ids: string[]) => void
   toggleAgentId: (id: string) => void
   removeAgentId: (id: string) => void
@@ -89,7 +91,7 @@ interface UIState {
   bumpIconCustomizationVersion: () => void
 }
 
-const { projectId: initialProjectId, sessionId: initialSessionId } = parseHash()
+const { projectSlug: initialProjectSlug, sessionId: initialSessionId } = parseHash()
 
 export const useUIStore = create<UIState>((set, get) => ({
   sidebarCollapsed: false,
@@ -97,10 +99,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   setSidebarWidth: (width) => set({ sidebarWidth: width }),
 
-  selectedProjectId: initialProjectId,
+  selectedProjectId: null,
+  selectedProjectSlug: initialProjectSlug,
   selectedSessionId: initialSessionId,
   selectedAgentIds: [],
-  setSelectedProjectId: (id) => {
+  setSelectedProject: (id, slug) => {
     const state = get()
     const nextFilterStates = new Map(state.sessionFilterStates)
 
@@ -113,8 +116,10 @@ export const useUIStore = create<UIState>((set, get) => ({
       })
     }
 
+    const newSlug = slug ?? null
     set({
       selectedProjectId: id,
+      selectedProjectSlug: newSlug,
       selectedSessionId: null,
       selectedAgentIds: [],
       sessionFilterStates: nextFilterStates,
@@ -122,7 +127,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       activeToolFilters: DEFAULT_FILTER_STATE.activeToolFilters,
       searchQuery: DEFAULT_FILTER_STATE.searchQuery,
     })
-    updateHash(id, null)
+    updateHash(newSlug, null)
   },
   setSelectedSessionId: (id) => {
     const state = get()
@@ -148,7 +153,12 @@ export const useUIStore = create<UIState>((set, get) => ({
       activeToolFilters: restored.activeToolFilters,
       searchQuery: restored.searchQuery,
     })
-    updateHash(state.selectedProjectId, id)
+    updateHash(state.selectedProjectSlug, id)
+  },
+  updateProjectSlug: (slug) => {
+    set({ selectedProjectSlug: slug })
+    const state = get()
+    updateHash(slug, state.selectedSessionId)
   },
   setSelectedAgentIds: (ids) => set({ selectedAgentIds: ids }),
   toggleAgentId: (id) =>
@@ -214,10 +224,11 @@ export const useUIStore = create<UIState>((set, get) => ({
 
 if (typeof window !== 'undefined') {
   window.addEventListener('hashchange', () => {
-    const { projectId, sessionId } = parseHash()
+    const { projectSlug, sessionId } = parseHash()
     const state = useUIStore.getState()
-    if (projectId !== state.selectedProjectId) {
-      state.setSelectedProjectId(projectId)
+    if (projectSlug !== state.selectedProjectSlug) {
+      // Slug changed in URL — update slug but keep projectId (will be resolved by components)
+      useUIStore.setState({ selectedProjectSlug: projectSlug })
     }
     if (sessionId !== state.selectedSessionId) {
       state.setSelectedSessionId(sessionId)
