@@ -14,7 +14,7 @@ Thanks for your interest in contributing!
 
 ## Project layout
 
-- `app/hooks/` — Hook script that forwards events from Claude Code
+- `hooks/scripts/` — Hook script that forwards events from Claude Code
 - `app/server/` — Hono server with SQLite storage and WebSocket
 - `app/client/` — React 19 dashboard with shadcn/ui
 

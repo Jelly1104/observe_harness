@@ -85,7 +85,7 @@ This prints a JSON snippet with all paths pre-filled. Copy it into your Claude C
 |----------|---------|-------------|
 | `CLAUDE_OBSERVE_PROJECT_NAME` | (required) | Name shown in the dashboard for this project |
 | `CLAUDE_OBSERVE_EVENTS_ENDPOINT` | `http://127.0.0.1:4981/api/events` | Full URL for the events endpoint |
-| `CLAUDE_OBSERVE_HOOK_SCRIPT` | (required) | Absolute path to `app/hooks/send_event.mjs` |
+| `CLAUDE_OBSERVE_HOOK_SCRIPT` | (required) | Absolute path to `hooks/scripts/send_event.mjs` |
 
 ### 3. Verify it works
 
@@ -131,7 +131,8 @@ just open                # Open the dashboard in browser
 
 ```text
 app/
-  hooks/send_event.mjs    # Hook script — dumb pipe, forwards raw events
+hooks/
+  scripts/send_event.mjs # Hook script — dumb pipe, forwards raw events
   server/                 # Node server — parses events, SQLite, WebSocket
     src/
       index.ts            # HTTP routes + WebSocket
@@ -178,7 +179,7 @@ Both local dev and Docker flows default to using the same sqlite database in ./d
 2. **Is the hook script configured?** Run `just setup-hooks my-project` and verify the output matches your `.claude/settings.json`.
 3. **Is `CLAUDE_OBSERVE_PROJECT_NAME` set?** If this env var is missing, the hook script will log a warning and skip events.
 4. **Can the hook reach the server?** Run `just test-event` — if the event appears in the dashboard, the server is reachable.
-5. **Is the hook script path correct?** The `CLAUDE_OBSERVE_HOOK_SCRIPT` must be an absolute path to `app/hooks/send_event.mjs`. Check for typos.
+5. **Is the hook script path correct?** The `CLAUDE_OBSERVE_HOOK_SCRIPT` must be an absolute path to `hooks/scripts/send_event.mjs`. Check for typos.
 
 **WebSocket disconnected?**
 

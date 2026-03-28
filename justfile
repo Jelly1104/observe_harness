@@ -89,7 +89,7 @@ test-watch:
 # Send a test event to the server
 test-event:
     @echo '{"session_id":"test-1234","hook_event_name":"SessionStart","cwd":"/tmp","source":"new"}' \
-      | CLAUDE_OBSERVE_PROJECT_NAME=test-project CLAUDE_OBSERVE_EVENTS_ENDPOINT=http://127.0.0.1:{{ port }}/api/events node {{ project_root }}/app/hooks/send_event.mjs
+      | CLAUDE_OBSERVE_PROJECT_NAME=test-project CLAUDE_OBSERVE_EVENTS_ENDPOINT=http://127.0.0.1:{{ port }}/api/events node {{ project_root }}/hooks/scripts/send_event.mjs
     @echo "Event sent"
 
 # ─── Database ────────────────────────────────────────────
@@ -104,7 +104,7 @@ db-reset:
 # Generate hooks config for a project's .claude/settings.json
 setup-hooks project_name:
     #!/usr/bin/env bash
-    hook_script="{{project_root}}/app/hooks/send_event.mjs"
+    hook_script="{{project_root}}/hooks/scripts/send_event.mjs"
     endpoint="http://127.0.0.1:{{port}}/api/events"
     sed \
       -e "s|__PROJECT_NAME__|{{project_name}}|g" \

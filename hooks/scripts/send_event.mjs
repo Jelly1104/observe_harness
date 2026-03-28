@@ -1,4 +1,4 @@
-// app/hooks/send_event.mjs
+// hooks/scripts/send_event.mjs
 // Sends hook events to the server and handles server requests for local data.
 // No dependencies -- uses only Node.js built-ins.
 
