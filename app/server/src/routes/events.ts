@@ -214,6 +214,13 @@ router.post('/events', async (c) => {
       await store.updateAgentStatus(parsed.subAgentId, 'stopped')
     }
 
+    // PostToolUse:Agent completion also marks the subagent as stopped.
+    // SubagentStop hook is unreliable and sometimes doesn't fire,
+    // but PostToolUse:Agent always fires when the agent task completes.
+    if (parsed.subtype === 'PostToolUse' && parsed.toolName === 'Agent' && parsed.subAgentId) {
+      await store.updateAgentStatus(parsed.subAgentId, 'stopped')
+    }
+
     // Set status for tool events
     let status = 'pending'
     if (parsed.subtype === 'PreToolUse') status = 'running'

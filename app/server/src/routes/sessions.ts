@@ -114,8 +114,8 @@ router.get('/sessions/:id/events', async (c) => {
   }))
 
   // Lazy status correction based on event history.
-  // Find the last SessionEnd — if events exist after it, the session was resumed.
   if (events.length > 0) {
+    // Session status: only SessionEnd ends a session
     let lastSessionEndIdx = -1
     for (let i = events.length - 1; i >= 0; i--) {
       if (events[i].subtype === 'SessionEnd') { lastSessionEndIdx = i; break }
@@ -123,14 +123,37 @@ router.get('/sessions/:id/events', async (c) => {
     const session = await store.getSessionById(sessionId)
     if (session) {
       if (lastSessionEndIdx >= 0 && lastSessionEndIdx === events.length - 1 && session.status === 'active') {
-        // SessionEnd is the last event — session is ended
         await store.updateSessionStatus(sessionId, 'stopped')
       } else if (lastSessionEndIdx >= 0 && lastSessionEndIdx < events.length - 1 && session.status === 'stopped') {
-        // Events exist after SessionEnd — session was resumed
         await store.updateSessionStatus(sessionId, 'active')
       } else if (lastSessionEndIdx < 0 && session.status === 'stopped') {
-        // No SessionEnd at all but marked stopped — reactivate
         await store.updateSessionStatus(sessionId, 'active')
+      }
+    }
+
+    // Agent status: mark subagents as stopped if they have a PostToolUse:Agent
+    // or SubagentStop but are still active (SubagentStop hook is unreliable)
+    const completedAgentIds = new Set<string>()
+    for (const e of events) {
+      if (e.subtype === 'SubagentStop' || (e.subtype === 'PostToolUse' && e.toolName === 'Agent')) {
+        const agentId = (e.payload as any)?.tool_response?.agentId || (e.payload as any)?.agent_id
+        if (agentId) completedAgentIds.add(agentId)
+      }
+    }
+    for (const agentId of completedAgentIds) {
+      const agent = await store.getAgentById(agentId)
+      if (agent && agent.status === 'active') {
+        await store.updateAgentStatus(agentId, 'stopped')
+      }
+    }
+
+    // Root agent status: if the last event is Stop/stop_hook_summary,
+    // the root agent should be stopped (idle between turns)
+    const lastEvent = events[events.length - 1]
+    if (lastEvent.subtype === 'Stop' || lastEvent.subtype === 'stop_hook_summary') {
+      const rootAgent = await store.getAgentById(sessionId) // root agent ID = session ID
+      if (rootAgent && rootAgent.status === 'active') {
+        await store.updateAgentStatus(sessionId, 'stopped')
       }
     }
   }
