@@ -115,9 +115,8 @@ This prints a JSON snippet with all paths pre-filled. Copy it into your Claude C
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CLAUDE_OBSERVE_PROJECT_NAME` | (required) | Name shown in the dashboard for this project |
+| `CLAUDE_OBSERVE_PROJECT_SLUG` | (auto-detected) | Project slug shown in the dashboard URL. If not set, derived from the session transcript path. |
 | `CLAUDE_OBSERVE_EVENTS_ENDPOINT` | `http://127.0.0.1:4981/api/events` | Full URL for the events endpoint |
-| `CLAUDE_OBSERVE_HOOK_SCRIPT` | (required) | Absolute path to `hooks/scripts/send_event.mjs` |
 
 ### 3. Verify it works
 
@@ -236,9 +235,8 @@ Run `/observe status` to check if the server is running. If the container doesn'
 
 1. **Is the server running?** Run `just health` to check.
 2. **Is the hook script configured?** Run `just setup-hooks my-project` and verify the output matches your `.claude/settings.json`.
-3. **Is `CLAUDE_OBSERVE_PROJECT_NAME` set?** If this env var is missing, the hook script derives the project name from the working directory basename. Set it explicitly if you want a custom name.
+3. **Is `CLAUDE_OBSERVE_PROJECT_SLUG` set?** If `CLAUDE_OBSERVE_PROJECT_SLUG` is not set, the project is auto-detected from the session transcript path.
 4. **Can the hook reach the server?** Run `just test-event` — if the event appears in the dashboard, the server is reachable.
-5. **Is the hook script path correct?** The `CLAUDE_OBSERVE_HOOK_SCRIPT` must be an absolute path to `hooks/scripts/send_event.mjs`. Check for typos.
 
 **WebSocket disconnected?**
 
