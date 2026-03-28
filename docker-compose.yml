@@ -13,4 +13,4 @@ services:
     ports:
       - "${SERVER_PORT:-4981}:${SERVER_PORT:-4981}"
     volumes:
-      - ./data:/data
+      - ${DATA_DIR:-./data}:/data

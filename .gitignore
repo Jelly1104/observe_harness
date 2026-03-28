@@ -17,6 +17,7 @@ htmlcov/
 
 # Docker data directory
 data/
+data-bak/
 
 # Security
 .env
