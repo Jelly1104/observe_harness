@@ -1,4 +1,5 @@
 import { useSyncExternalStore, useCallback } from 'react'
+import { useUIStore } from '@/stores/ui-store'
 
 const STORAGE_KEY = 'observe-icon-customizations'
 
@@ -147,6 +148,7 @@ function saveCustomizations(customizations: IconCustomizations) {
   cachedCustomizations = customizations
   localStorage.setItem(STORAGE_KEY, JSON.stringify(customizations))
   notifyListeners()
+  useUIStore.getState().bumpIconCustomizationVersion()
 }
 
 // Snapshot-based subscriptions for useSyncExternalStore

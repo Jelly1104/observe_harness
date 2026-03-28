@@ -77,6 +77,10 @@ interface UIState {
   // Auto-follow
   autoFollow: boolean
   setAutoFollow: (enabled: boolean) => void
+
+  // Icon customization reactivity
+  iconCustomizationVersion: number
+  bumpIconCustomizationVersion: () => void
 }
 
 const { projectId: initialProjectId, sessionId: initialSessionId } = parseHash()
@@ -197,6 +201,9 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   autoFollow: true,
   setAutoFollow: (enabled) => set({ autoFollow: enabled }),
+
+  iconCustomizationVersion: 0,
+  bumpIconCustomizationVersion: () => set((s) => ({ iconCustomizationVersion: s.iconCustomizationVersion + 1 })),
 }))
 
 if (typeof window !== 'undefined') {

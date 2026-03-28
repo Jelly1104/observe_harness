@@ -58,7 +58,7 @@ const LABEL_MAP: Record<string, string> = {
 }
 
 export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap, showAgentLabel, spawnInfo, onRowRef }: EventRowProps) {
-  const { expandedEventIds, toggleExpandedEvent, scrollToEventId, setScrollToEventId, selectedEventId, setSelectedEventId } =
+  const { expandedEventIds, toggleExpandedEvent, scrollToEventId, setScrollToEventId, selectedEventId, setSelectedEventId, iconCustomizationVersion } =
     useUIStore()
   const isExpanded = expandedEventIds.has(event.id)
   const isSelected = selectedEventId === event.id

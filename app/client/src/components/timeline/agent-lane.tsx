@@ -20,6 +20,7 @@ function DotContainer({
   generation: number
   setScrollToEventId: (id: number | null) => void
 }) {
+  const { iconCustomizationVersion } = useUIStore()
   return (
     <>
       {events.map((event) => {
@@ -87,7 +88,7 @@ function tooltipLabel(event: ParsedEvent): string {
 }
 
 export function AgentLane({ agentId, agentName, events, allEvents, isSubagent, color }: AgentLaneProps) {
-  const { timeRange, setScrollToEventId } = useUIStore()
+  const { timeRange, setScrollToEventId, iconCustomizationVersion } = useUIStore()
 
   const rangeMs = useMemo(() => {
     const ranges = { '1m': 60_000, '5m': 300_000, '10m': 600_000, '60m': 3_600_000 }
@@ -101,6 +102,14 @@ export function AgentLane({ agentId, agentName, events, allEvents, isSubagent, c
     prevRangeRef.current = rangeMs
     generationRef.current++
   }
+
+  // Also remount dots when icon customizations change
+  const prevCustomVersionRef = useRef(iconCustomizationVersion)
+  if (prevCustomVersionRef.current !== iconCustomizationVersion) {
+    prevCustomVersionRef.current = iconCustomizationVersion
+    generationRef.current++
+  }
+
   const generation = generationRef.current
 
   const visibleEvents = useMemo(
