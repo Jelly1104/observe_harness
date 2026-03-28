@@ -11,6 +11,37 @@ Real-time observability for Claude Code agents with powerful filtering, searchin
 
 The server and dashboard run locally or remotely, allowing multiple Claude Code instances to log full session data using hooks.
 
+## Plugin Installation
+
+### Prerequisites
+
+- [Docker](https://www.docker.com/) (required — the server runs as a container)
+- [Node.js](https://nodejs.org/) (required — hook scripts run via `node`)
+
+### Install
+
+1. Add the marketplace:
+   ```bash
+   claude plugin marketplace add simple10/claude-observe
+   ```
+
+2. Install the plugin:
+   ```bash
+   claude plugin install claude-observe
+   ```
+
+3. Restart Claude Code.
+
+That's it. On your next session, the server auto-starts as a Docker container and hooks begin capturing events. Open **http://localhost:4981** to see the dashboard.
+
+## Plugin Skills
+
+| Skill | Description |
+|-------|-------------|
+| `/observe` | Open the dashboard URL and check if the server is running |
+| `/observe stop` | Stop the Docker container (auto-restarts on next session) |
+| `/observe status` | Show container status and server health |
+
 ## Why observability matters
 
 When Claude Code runs autonomously — spawning subagents, calling tools, reading files, executing commands — you have no visibility into what's actually happening. The terminal shows a fraction of the activity. Subagents are invisible. Tool calls blur together. And when something goes wrong three agents deep in a parallel execution, you're left reading through logs after the fact.
@@ -42,13 +73,9 @@ Claude Code Hooks  →  send_event.mjs  →  API Server (SQLite)  →  React Das
 
 The hook script is a dumb pipe — it reads the raw event from stdin, adds the project name, and POSTs it to the server. The server parses events, builds the agent hierarchy, and broadcasts to connected clients via WebSocket. The React dashboard consumes the API and renders the event stream, timeline, and filters.
 
-## Prerequisites
+## Standalone Installation
 
-- [Node.js](https://nodejs.org/) (for the client and hook script)
-- [just](https://github.com/casey/just) (optional, for convenience commands)
-- [Docker](https://www.docker.com/) (optional, for containerized deployment)
-
-## Installation
+> For development or running without the plugin. If you installed via the plugin above, skip this section.
 
 ### 1. Clone and install dependencies
 
@@ -99,7 +126,7 @@ just test-event
 
 Navigate to **<http://localhost:5174>** (dev) or **<http://localhost:4981>** (Docker). You should see the test event appear. Start a Claude Code session in your configured project and events will stream in automatically.
 
-## Commands
+## Standalone Commands
 
 If you have [just](https://github.com/casey/just) installed:
 
@@ -130,29 +157,40 @@ just open                # Open the dashboard in browser
 ## Project structure
 
 ```text
-app/
 hooks/
-  scripts/send_event.mjs # Hook script — dumb pipe, forwards raw events
-  server/                 # Node server — parses events, SQLite, WebSocket
+  hooks.json                 # Plugin hook definitions
+  scripts/
+    send_event.mjs           # Hook script — forwards raw events to server
+    manage_server.sh         # MCP server — manages Docker container
+skills/
+  observe/                   # /observe skill
+  observe-stop/              # /observe stop skill
+  observe-status/            # /observe status skill
+.claude-plugin/
+  plugin.json                # Plugin manifest
+marketplace.json             # Self-hosted marketplace manifest
+.mcp.json                    # MCP server configuration
+app/
+  server/                    # Node server — parses events, SQLite, WebSocket
     src/
-      index.ts            # HTTP routes + WebSocket
-      db.ts               # SQLite schema + queries
-      parser.ts           # Raw JSONL → structured event extraction
-  client/                 # React 19 + shadcn dashboard
+      index.ts               # HTTP routes + WebSocket
+      db.ts                  # SQLite schema + queries
+      parser.ts              # Raw JSONL → structured event extraction
+  client/                    # React 19 + shadcn dashboard
     src/
       components/
-        sidebar/          # Project + session navigation
-        main-panel/       # Scope bar, filters
-        timeline/         # Activity swim lanes
-        event-stream/     # Event rows + detail expansion
+        sidebar/             # Project + session navigation
+        main-panel/          # Scope bar, filters
+        timeline/            # Activity swim lanes
+        event-stream/        # Event rows + detail expansion
       config/
-        event-icons.ts    # Emoji mapping (editable)
+        event-icons.ts       # Emoji mapping (editable)
       lib/
-        event-summary.ts  # Client-side summary generation
-        agent-utils.ts    # Agent display names
+        event-summary.ts     # Client-side summary generation
+        agent-utils.ts       # Agent display names
       stores/
-        ui-store.ts       # Zustand UI state + URL routing
-      hooks/              # TanStack Query data hooks + WebSocket
+        ui-store.ts          # Zustand UI state + URL routing
+      hooks/                 # TanStack Query data hooks + WebSocket
 ```
 
 ## How it works
@@ -172,6 +210,21 @@ In production or docker mode, the client is bundled and served by the server. Bo
 Both local dev and Docker flows default to using the same sqlite database in ./data. The database is auto created as needed.
 
 ## Troubleshooting
+
+**Docker not running?**
+
+The plugin requires Docker to run the server. Make sure Docker Desktop (or the Docker daemon) is running, then restart Claude Code.
+
+**Port 4981 in use?**
+
+If another process is using port 4981, stop it or remove a stale container:
+```bash
+docker stop claude-observe && docker rm claude-observe
+```
+
+**Plugin not capturing events?**
+
+Run `/observe status` to check if the server is running. If the container doesn't exist, restart Claude Code. Check Docker logs with `docker logs claude-observe`.
 
 **Events not appearing in the dashboard?**
 
