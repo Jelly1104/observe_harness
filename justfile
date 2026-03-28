@@ -1,7 +1,7 @@
 # Claude Observe
 # Usage: just <recipe>
 #
-# SERVER_PORT & CLIENT_PORT are read from .env
+# CLAUDE_OBSERVE_PORT & CLAUDE_OBSERVE_CLIENT_PORT are read from .env
 # Allows for overriding the default ports
 # Server port is used for both local dev & docker starts
 # Client port is only for local dev
@@ -9,8 +9,8 @@
 set dotenv-load := true
 set quiet := true
 
-port := env("SERVER_PORT", "4981")
-client_port := env("CLIENT_PORT", "5174")
+port := env("CLAUDE_OBSERVE_PORT", "4981")
+client_port := env("CLAUDE_OBSERVE_CLIENT_PORT", "5174")
 project_root := justfile_directory()
 server := project_root / "app" / "server"
 client := project_root / "app" / "client"

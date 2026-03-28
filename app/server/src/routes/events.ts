@@ -14,7 +14,7 @@ type Env = {
 
 const router = new Hono<Env>()
 
-const LOG_LEVEL = process.env.SERVER_LOG_LEVEL || 'debug'
+const LOG_LEVEL = process.env.CLAUDE_OBSERVE_LOG_LEVEL || 'debug'
 
 // Track root agent IDs per session (sessionId -> agentId)
 const sessionRootAgents = new Map<string, string>()

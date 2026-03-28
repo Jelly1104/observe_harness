@@ -52,10 +52,10 @@ else
   docker run -d \
     --name "$CONTAINER_NAME" \
     -p "${PORT}:${PORT}" \
-    -e "SERVER_PORT=${PORT}" \
-    -e "DB_PATH=/data/observe.db" \
-    -e "CLIENT_DIST_PATH=/app/client/dist" \
-    -e "ENABLE_WEBSOCKET=true" \
+    -e "CLAUDE_OBSERVE_PORT=${PORT}" \
+    -e "CLAUDE_OBSERVE_DB_PATH=/data/observe.db" \
+    -e "CLAUDE_OBSERVE_CLIENT_DIST_PATH=/app/client/dist" \
+    -e "CLAUDE_OBSERVE_WEBSOCKET=true" \
     -v "${DATA_DIR}:/data" \
     "$IMAGE" >/dev/null
 

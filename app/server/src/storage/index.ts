@@ -4,11 +4,11 @@ import { SqliteAdapter } from './sqlite-adapter'
 import type { EventStore } from './types'
 
 export function createStore(): EventStore {
-  const adapter = process.env.STORAGE_ADAPTER || 'sqlite'
+  const adapter = process.env.CLAUDE_OBSERVE_STORAGE_ADAPTER || 'sqlite'
 
   switch (adapter) {
     case 'sqlite': {
-      const dbPath = process.env.DB_PATH || '../../data/observe.db'
+      const dbPath = process.env.CLAUDE_OBSERVE_DB_PATH || '../../data/observe.db'
       return new SqliteAdapter(dbPath)
     }
     default:

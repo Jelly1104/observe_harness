@@ -5,12 +5,12 @@ services:
       dockerfile: Dockerfile
     container_name: claude-observe
     environment:
-      SERVER_PORT: "${SERVER_PORT:-4981}"
-      DB_PATH: /data/observe.db
-      CLIENT_DIST_PATH: /app/client/dist
-      ENABLE_WEBSOCKET: "true"
-      SERVER_LOG_LEVEL: "${SERVER_LOG_LEVEL:-debug}"
+      CLAUDE_OBSERVE_PORT: "${CLAUDE_OBSERVE_PORT:-4981}"
+      CLAUDE_OBSERVE_DB_PATH: /data/observe.db
+      CLAUDE_OBSERVE_CLIENT_DIST_PATH: /app/client/dist
+      CLAUDE_OBSERVE_WEBSOCKET: "true"
+      CLAUDE_OBSERVE_LOG_LEVEL: "${CLAUDE_OBSERVE_LOG_LEVEL:-debug}"
     ports:
-      - "${SERVER_PORT:-4981}:${SERVER_PORT:-4981}"
+      - "${CLAUDE_OBSERVE_PORT:-4981}:${CLAUDE_OBSERVE_PORT:-4981}"
     volumes:
       - ${DATA_DIR:-./data}:/data

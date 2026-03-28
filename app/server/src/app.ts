@@ -36,8 +36,8 @@ export function createApp(store: EventStore, broadcast: (msg: object) => void) {
   app.route('/api', pollRouter)
   app.route('/api', healthRouter)
 
-  // Serve built client static files when CLIENT_DIST_PATH is set
-  const clientDistPath = process.env.CLIENT_DIST_PATH
+  // Serve built client static files when CLAUDE_OBSERVE_CLIENT_DIST_PATH is set
+  const clientDistPath = process.env.CLAUDE_OBSERVE_CLIENT_DIST_PATH
   if (clientDistPath && fs.existsSync(clientDistPath)) {
     app.use('/*', serveStatic({ root: path.relative(process.cwd(), clientDistPath) }))
 
