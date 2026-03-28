@@ -32,12 +32,12 @@ export function EventStream() {
 
   const { data: agents } = useAgents(selectedSessionId)
 
-  // When events load, check if the session has ended — if so, refetch sessions
-  // so the sidebar status dot updates (server lazily patches the DB)
+  // When events load, check if session has a SessionEnd event — if so, refetch
+  // sessions so the sidebar status dot updates (server lazily patches the DB)
   useEffect(() => {
     if (!events || events.length === 0) return
-    const last = events[events.length - 1]
-    if (last.subtype === 'SessionEnd' || last.subtype === 'Stop' || last.subtype === 'stop_hook_summary') {
+    const hasSessionEnd = events.some((e) => e.subtype === 'SessionEnd')
+    if (hasSessionEnd) {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
     }
   }, [events, queryClient])

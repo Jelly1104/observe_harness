@@ -170,20 +170,30 @@ router.post('/events', async (c) => {
     }
 
     // Handle stop events — Stop hook marks root agent inactive;
-    // any subsequent event reactivates it
-    if (parsed.subtype === 'Stop' || parsed.subtype === 'stop_hook_summary' || parsed.subtype === 'SessionEnd') {
+    // any subsequent event reactivates it.
+    // Session status is independent: only SessionEnd marks a session as stopped.
+    if (parsed.subtype === 'Stop' || parsed.subtype === 'stop_hook_summary') {
+      await store.updateAgentStatus(rootAgentId, 'stopped')
+      broadcast({
+        type: 'agent_update',
+        data: { id: rootAgentId, status: 'stopped', sessionId: parsed.sessionId },
+      })
+    } else if (parsed.subtype === 'SessionEnd') {
       await store.updateAgentStatus(rootAgentId, 'stopped')
       await store.updateSessionStatus(parsed.sessionId, 'stopped')
       broadcast({
         type: 'agent_update',
         data: { id: rootAgentId, status: 'stopped', sessionId: parsed.sessionId },
       })
+      broadcast({
+        type: 'session_update',
+        data: { id: parsed.sessionId, status: 'stopped' },
+      })
     } else {
       // Reactivate root agent if it was previously stopped
       const agent = await store.getAgentById(rootAgentId)
       if (agent && agent.status === 'stopped') {
         await store.updateAgentStatus(rootAgentId, 'active')
-        await store.updateSessionStatus(parsed.sessionId, 'active')
         broadcast({
           type: 'agent_update',
           data: { id: rootAgentId, status: 'active', sessionId: parsed.sessionId },
