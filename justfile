@@ -21,6 +21,10 @@ default:
 
 # ─── Docker ─────────────────────────────────────────────
 
+# Build the Docker image locally
+build:
+    docker build -t claude-observe:local .
+
 # Start production containers (detached)
 start:
     @mkdir -p {{ project_root }}/data
@@ -135,6 +139,34 @@ open:
 fmt:
     cd {{ server }} && npm run fmt
     cd {{ client }} && npm run fmt
+
+# Tag and push a release (triggers GitHub Actions to build Docker image)
+release version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    v="{{version}}"
+    if [ -z "$v" ]; then
+      echo "Usage: just release <version>  (e.g. just release 1.0.0)"
+      exit 1
+    fi
+    # Strip leading "v" if provided, then add it back
+    v="${v#v}"
+    tag="v${v}"
+    if git rev-parse "$tag" >/dev/null 2>&1; then
+      echo "Error: tag $tag already exists"
+      exit 1
+    fi
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "Error: working directory is not clean — commit or stash changes first"
+      exit 1
+    fi
+    just test
+    just build
+    echo "Creating release $tag..."
+    git tag "$tag"
+    git push origin "$tag"
+    echo "Pushed $tag — GitHub Actions will build and publish the Docker image"
+    echo "Watch: https://github.com/simple10/claude-observe/actions"
 
 # Install all dependencies
 install:
