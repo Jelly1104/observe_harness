@@ -172,8 +172,9 @@ skills/
   observe-status/            # /observe status skill
 .claude-plugin/
   plugin.json                # Plugin manifest
-marketplace.json             # Self-hosted marketplace manifest
+  marketplace.json           # Self-hosted marketplace manifest
 .mcp.json                    # MCP server configuration
+package.json                 # Version metadata
 app/
   server/                    # Node server — parses events, SQLite, WebSocket
     src/

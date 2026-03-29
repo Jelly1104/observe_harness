@@ -1,10 +1,13 @@
 {
   "name": "claude-observe",
+  "owner": {
+    "name": "simple10"
+  },
   "plugins": [
     {
       "name": "claude-observe",
       "description": "Real-time observability dashboard for Claude Code agents",
-      "source": "."
+      "source": "./"
     }
   ]
 }

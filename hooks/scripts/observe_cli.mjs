@@ -55,7 +55,7 @@ const allowedCallbacks = (() => {
 // -- Docker config ------------------------------------------------
 
 const containerName = process.env.CLAUDE_OBSERVE_CONTAINER || 'claude-observe'
-const dockerImage = process.env.CLAUDE_OBSERVE_IMAGE || 'ghcr.io/simple10/claude-observe:latest'
+const dockerImage = process.env.CLAUDE_OBSERVE_IMAGE || 'ghcr.io/simple10/claude-observe:v0.5.0'
 const port = (() => {
   const url = new URL(baseUrl)
   return url.port || '4981'
