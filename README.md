@@ -41,8 +41,7 @@ That's it. On your next session, the server auto-starts as a Docker container an
 | Skill | Description |
 |-------|-------------|
 | `/observe` | Open the dashboard URL and check if the server is running |
-| `/observe stop` | Stop the Docker container (auto-restarts on next session) |
-| `/observe status` | Show container status and server health |
+| `/observe status` | Check server health and show dashboard URL |
 
 ## Why observability matters
 
@@ -164,11 +163,14 @@ just open                # Open the dashboard in browser
 hooks/
   hooks.json                 # Plugin hook definitions
   scripts/
-    observe_cli.mjs          # CLI — sends hook events, manages server
-    manage_server.sh         # MCP server — manages Docker container
+    observe_cli.mjs          # CLI — hook forwarding + health check
+    mcp_server.mjs           # MCP stdio server — Docker lifecycle + JSON-RPC
+    lib/
+      config.mjs             # Shared config resolution
+      http.mjs               # HTTP helpers (getJson, postJson)
+      docker.mjs             # Docker container management
 skills/
   observe/                   # /observe skill
-  observe-stop/              # /observe stop skill
   observe-status/            # /observe status skill
 .claude-plugin/
   plugin.json                # Plugin manifest

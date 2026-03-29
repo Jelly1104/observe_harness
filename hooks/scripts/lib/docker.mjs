@@ -1,0 +1,170 @@
+// hooks/scripts/lib/docker.mjs
+// Docker container management for Claude Observe. Node.js built-ins only.
+
+import { execFile } from 'node:child_process'
+import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs'
+import { getJson } from './http.mjs'
+
+// -- Shell helper -------------------------------------------------
+
+function run(cmd, args) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout: 30000 }, (err, stdout, stderr) => {
+      resolve({
+        ok: !err,
+        code: err?.code ?? 0,
+        stdout: stdout?.trim() || '',
+        stderr: stderr?.trim() || '',
+      })
+    })
+  })
+}
+
+// -- Port file management -----------------------------------------
+
+export function saveMcpPort(config, port) {
+  mkdirSync(config.pluginDataDir, { recursive: true })
+  writeFileSync(config.mcpPortFile, String(port))
+}
+
+export function removeMcpPort(config) {
+  try {
+    unlinkSync(config.mcpPortFile)
+  } catch {
+    /* already gone */
+  }
+}
+
+// -- Docker lifecycle ---------------------------------------------
+
+function log(msg) {
+  console.error(`[claude-observe] ${msg}`)
+}
+
+/**
+ * Starts the Docker container. Returns the actual port the server is running on.
+ * Handles: version mismatch (restart), port conflict (auto-assign), stale containers.
+ */
+export async function startServer(config) {
+  // Check Docker availability
+  const dockerCheck = await run('docker', ['info'])
+  if (!dockerCheck.ok) {
+    log('ERROR: Docker is not running or not installed')
+    log('Install Docker: https://docs.docker.com/get-docker/')
+    return null
+  }
+
+  // Check if something is already running on the target port
+  const healthResult = await getJson(`${config.apiBaseUrl}/health`)
+  if (healthResult.status === 200 && healthResult.body?.ok) {
+    if (healthResult.body.id !== config.API_ID) {
+      log(`Port ${config.serverPort} is in use by another service, auto-assigning a free port...`)
+    } else if (config.expectedVersion && healthResult.body.version !== config.expectedVersion) {
+      log(`Server version mismatch: running ${healthResult.body.version}, expected ${config.expectedVersion}. Restarting...`)
+      await run('docker', ['stop', config.containerName])
+      await run('docker', ['rm', config.containerName])
+    } else {
+      const port = new URL(config.apiBaseUrl).port || '4981'
+      log(`Server already running on port ${port}`)
+      return port
+    }
+  }
+
+  // Ensure data directory
+  mkdirSync(config.dataDir, { recursive: true })
+
+  // Remove stale container to ensure latest image
+  const psResult = await run('docker', ['ps', '-a', '--format', '{{.Names}}'])
+  if (psResult.ok && psResult.stdout.split('\n').includes(config.containerName)) {
+    log('Removing stopped container to pull latest image...')
+    await run('docker', ['rm', config.containerName])
+  }
+
+  // Pull image
+  log('Pulling image and starting container...')
+  const pullResult = await run('docker', ['pull', config.dockerImage])
+  if (!pullResult.ok) {
+    log(`Failed to pull image: ${pullResult.stderr}`)
+    return null
+  }
+
+  // Try preferred port, fall back to auto-assign
+  const preferredPort = config.serverPort
+  const containerPort = '4981'
+
+  let runResult = await run('docker', [
+    'run', '-d',
+    '--name', config.containerName,
+    '-p', `${preferredPort}:${containerPort}`,
+    '-e', `CLAUDE_OBSERVE_SERVER_PORT=${containerPort}`,
+    '-e', 'CLAUDE_OBSERVE_DB_PATH=/data/observe.db',
+    '-e', 'CLAUDE_OBSERVE_CLIENT_DIST_PATH=/app/client/dist',
+    '-e', 'CLAUDE_OBSERVE_WEBSOCKET=true',
+    '-v', `${config.dataDir}:/data`,
+    config.dockerImage,
+  ])
+
+  let actualPort = preferredPort
+
+  if (!runResult.ok && runResult.stderr.includes('port is already allocated')) {
+    log(`Port ${preferredPort} is in use, auto-assigning a free port...`)
+
+    runResult = await run('docker', [
+      'run', '-d',
+      '--name', config.containerName,
+      '-p', `0:${containerPort}`,
+      '-e', `CLAUDE_OBSERVE_SERVER_PORT=${containerPort}`,
+      '-e', 'CLAUDE_OBSERVE_DB_PATH=/data/observe.db',
+      '-e', 'CLAUDE_OBSERVE_CLIENT_DIST_PATH=/app/client/dist',
+      '-e', 'CLAUDE_OBSERVE_WEBSOCKET=true',
+      '-v', `${config.dataDir}:/data`,
+      config.dockerImage,
+    ])
+
+    if (!runResult.ok) {
+      log(`Failed to start container: ${runResult.stderr}`)
+      return null
+    }
+
+    const portResult = await run('docker', ['port', config.containerName, containerPort])
+    if (portResult.ok) {
+      const match = portResult.stdout.match(/:(\d+)$/)
+      if (match) actualPort = match[1]
+    }
+  } else if (!runResult.ok) {
+    log(`Failed to start container: ${runResult.stderr}`)
+    return null
+  }
+
+  // Save port for hooks to discover
+  saveMcpPort(config, actualPort)
+
+  // Wait for health
+  const actualApiUrl = `http://127.0.0.1:${actualPort}/api`
+  log('Waiting for server to start...')
+  for (let i = 0; i < 15; i++) {
+    const h = await getJson(`${actualApiUrl}/health`)
+    if (h.status === 200 && h.body?.ok) {
+      log('Server started successfully')
+      if (actualPort !== preferredPort) {
+        log(`Note: Using port ${actualPort} (preferred port ${preferredPort} was in use)`)
+      }
+      return actualPort
+    }
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+
+  log('Server failed to start within 15 seconds')
+  log(`Check: docker logs ${config.containerName}`)
+  return null
+}
+
+/**
+ * Stops the Docker container and cleans up the port file.
+ */
+export async function stopServer(config) {
+  log('Stopping server...')
+  await run('docker', ['stop', config.containerName])
+  await run('docker', ['rm', config.containerName])
+  removeMcpPort(config)
+}

@@ -1,6 +1,6 @@
 ---
 name: observe-status
-description: Check the status of the Claude Observe server and Docker container.
+description: Check the status of the Claude Observe server.
 user_invocable: true
 ---
 
@@ -10,9 +10,9 @@ Check the Claude Observe server status.
 
 ## Instructions
 
-1. Run this command to check status:
+1. Run this command to check the server health:
    ```bash
-   node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs server status
+   node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs health
    ```
 
-2. Show the output to the user. The command checks both the Docker container status and the server health endpoint.
+2. Show the output to the user.
