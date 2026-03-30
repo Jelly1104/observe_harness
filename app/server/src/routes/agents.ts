@@ -29,6 +29,22 @@ router.get('/agents/:id/events', async (c) => {
   return c.json(events)
 })
 
+// GET /agents/:id
+router.get('/agents/:id', async (c) => {
+  const store = c.get('store')
+  const agentId = decodeURIComponent(c.req.param('id'))
+  const row = await store.getAgentById(agentId)
+  if (!row) return c.json({ error: 'Agent not found' }, 404)
+  return c.json({
+    id: row.id,
+    sessionId: row.session_id,
+    parentAgentId: row.parent_agent_id,
+    slug: row.slug,
+    name: row.name,
+    agentType: row.agent_type || null,
+  })
+})
+
 // POST /agents/:id/metadata
 router.post('/agents/:id/metadata', async (c) => {
   const store = c.get('store')

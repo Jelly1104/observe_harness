@@ -1,7 +1,7 @@
 // app/server/src/routes/sessions.ts
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
-import type { Agent, ParsedEvent } from '../types'
+import type { ParsedEvent } from '../types'
 
 type Env = {
   Variables: {
@@ -63,7 +63,7 @@ router.get('/sessions/:id/agents', async (c) => {
   const store = c.get('store')
   const sessionId = decodeURIComponent(c.req.param('id'))
   const rows = await store.getAgentsForSession(sessionId)
-  const agents: Agent[] = rows.map((r: any) => ({
+  const agents = rows.map((r: any) => ({
     id: r.id,
     sessionId: r.session_id,
     parentAgentId: r.parent_agent_id,
@@ -71,7 +71,6 @@ router.get('/sessions/:id/agents', async (c) => {
     name: r.name,
     agentType: r.agent_type || null,
   }))
-
   return c.json(agents)
 })
 
