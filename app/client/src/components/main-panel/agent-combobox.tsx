@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
+import { useEvents } from '@/hooks/use-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useUIStore } from '@/stores/ui-store'
 import { getAgentDisplayName, buildAgentColorMap, getAgentColorById } from '@/lib/agent-utils'
@@ -19,8 +20,9 @@ import { Bot, Check, ChevronDown, X, Users } from 'lucide-react'
 import type { Agent } from '@/types'
 
 function formatRuntime(agent: Agent): string {
-  const end = agent.stoppedAt ?? Date.now()
-  const ms = end - agent.startedAt
+  const end = agent.lastEventAt ?? Date.now()
+  const start = agent.firstEventAt ?? end
+  const ms = end - start
   if (ms < 60_000) return `${Math.round(ms / 1000)}s`
   if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`
   return `${(ms / 3_600_000).toFixed(1)}h`
@@ -36,41 +38,37 @@ function formatStartTime(ts: number): string {
 
 export function AgentCombobox() {
   const { selectedSessionId, selectedAgentIds, toggleAgentId, setSelectedAgentIds } = useUIStore()
-  const { data: agents } = useAgents(selectedSessionId)
+  const { data: events } = useEvents(selectedSessionId)
+  const agents = useAgents(selectedSessionId, events)
   const [open, setOpen] = useState(false)
   const snapshotRef = useRef<Agent[]>([])
-
-  const allAgents = useMemo(() => {
-    if (!agents) return []
-    return agents.filter((a) => (a.eventCount ?? 0) > 0)
-  }, [agents])
 
   // Snapshot the sorted order when the popover opens so it doesn't
   // re-sort while the user is browsing
   const sortedAgents = useMemo(() => {
     if (!open) return snapshotRef.current
 
-    const main = allAgents.filter((a) => !a.parentAgentId)
-    const subs = allAgents
+    const main = agents.filter((a) => !a.parentAgentId)
+    const subs = agents
       .filter((a) => a.parentAgentId)
       .sort((a, b) => {
         // Active first
         if (a.status === 'active' && b.status !== 'active') return -1
         if (a.status !== 'active' && b.status === 'active') return 1
         // Most recently started first
-        return b.startedAt - a.startedAt
+        return (b.firstEventAt ?? 0) - (a.firstEventAt ?? 0)
       })
 
     const sorted = [...main, ...subs]
     snapshotRef.current = sorted
     return sorted
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, allAgents])
+  }, [open, agents])
 
   const agentColorMap = useMemo(() => buildAgentColorMap(agents), [agents])
 
-  const activeCount = allAgents.filter((a) => a.status === 'active').length
-  const selectedAgents = allAgents.filter((a) => selectedAgentIds.includes(a.id))
+  const activeCount = agents.filter((a) => a.status === 'active').length
+  const selectedAgents = agents.filter((a) => selectedAgentIds.includes(a.id))
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
@@ -124,7 +122,7 @@ export function AgentCombobox() {
                 </CommandItem>
               </CommandGroup>
               <CommandSeparator />
-              <CommandGroup heading={`${allAgents.length} agents`}>
+              <CommandGroup heading={`${agents.length} agents`}>
                 {sortedAgents.map((agent) => {
                   const isSelected = selectedAgentIds.includes(agent.id)
                   const displayName = getAgentDisplayName(agent)
@@ -164,13 +162,11 @@ export function AgentCombobox() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0 text-[10px] text-muted-foreground">
-                        <span>{formatStartTime(agent.startedAt)}</span>
+                        <span>{formatStartTime(agent.firstEventAt ?? 0)}</span>
                         <span>{formatRuntime(agent)}</span>
-                        {agent.eventCount != null && (
-                          <Badge variant="outline" className="text-[9px] h-3.5 px-1">
-                            {agent.eventCount}
-                          </Badge>
-                        )}
+                        <Badge variant="outline" className="text-[9px] h-3.5 px-1">
+                          {agent.eventCount}
+                        </Badge>
                       </div>
                     </CommandItem>
                   )

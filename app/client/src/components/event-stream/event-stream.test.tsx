@@ -15,17 +15,7 @@ vi.mock('@/hooks/use-events', () => ({
 }))
 
 vi.mock('@/hooks/use-agents', () => ({
-  useAgents: () => ({ data: mockAgents }),
-}))
-
-// Mock api-client to prevent real fetch calls
-vi.mock('@/lib/api-client', () => ({
-  api: {
-    updateAgentMetadata: vi.fn(() => Promise.resolve()),
-    getThread: vi.fn(() => Promise.resolve([])),
-    getEvents: vi.fn(() => Promise.resolve([])),
-    getAgents: vi.fn(() => Promise.resolve([])),
-  },
+  useAgents: () => mockAgents,
 }))
 
 // Mock timeago.js to return stable strings
@@ -67,8 +57,9 @@ function makeAgent(overrides: Partial<Agent>): Agent {
     slug: null,
     name: null,
     status: 'active',
-    startedAt: Date.now(),
-    stoppedAt: null,
+    eventCount: 0,
+    firstEventAt: Date.now(),
+    lastEventAt: Date.now(),
     ...overrides,
   }
 }

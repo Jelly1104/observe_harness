@@ -15,8 +15,9 @@ function makeAgent(overrides: Partial<Agent>): Agent {
     slug: null,
     name: null,
     status: 'active',
-    startedAt: Date.now(),
-    stoppedAt: null,
+    eventCount: 0,
+    firstEventAt: Date.now(),
+    lastEventAt: Date.now(),
     ...overrides,
   }
 }

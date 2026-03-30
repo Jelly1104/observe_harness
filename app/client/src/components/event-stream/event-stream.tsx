@@ -1,5 +1,4 @@
 import { useMemo, useRef, useEffect, useDeferredValue, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { useEvents } from '@/hooks/use-events'
 import { useAgents } from '@/hooks/use-agents'
 import { useUIStore } from '@/stores/ui-store'
@@ -7,7 +6,6 @@ import { EventRow } from './event-row'
 import { eventMatchesFilters } from '@/config/filters'
 import { format } from 'timeago.js'
 import { buildAgentColorMap } from '@/lib/agent-utils'
-import { api } from '@/lib/api-client'
 import type { Agent, ParsedEvent } from '@/types'
 
 export function EventStream() {
@@ -28,15 +26,13 @@ export function EventStream() {
   const deferredToolFilters = useDeferredValue(activeToolFilters)
   const deferredSearchQuery = useDeferredValue(searchQuery)
 
-  const queryClient = useQueryClient()
-
   const { data: events } = useEvents(selectedSessionId)
 
-  const { data: agents } = useAgents(selectedSessionId)
+  const agents = useAgents(selectedSessionId, events)
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>()
-    agents?.forEach((a) => map.set(a.id, a))
+    agents.forEach((a) => map.set(a.id, a))
     return map
   }, [agents])
 
@@ -127,42 +123,6 @@ export function EventStream() {
     return filtered
   }, [deduped, selectedAgentIds, spawnToolUseIds, deferredStaticFilters, deferredToolFilters, deferredSearchQuery])
 
-  // Auto-detect agent types from event payloads and patch agents missing their type.
-  // Sources: SubagentStart payload.agent_type, event-level payload.agent_type
-  const patchedAgentTypes = useRef(new Set<string>())
-  useEffect(() => {
-    if (!events || !agents) return
-    for (const event of events) {
-      const payload = event.payload as any
-      const agentId = event.agentId
-
-      // Skip if we already patched this agent
-      if (patchedAgentTypes.current.has(agentId)) continue
-
-      // Detect agent type from various payload locations
-      let detectedType: string | null = null
-      if (event.subtype === 'SubagentStart' && payload?.agent_type) {
-        detectedType = payload.agent_type
-      } else if (payload?.agent_type) {
-        detectedType = payload.agent_type
-      }
-
-      if (!detectedType) continue
-
-      // Check if this agent already has a type set
-      const agent = agentMap.get(agentId)
-      if (agent && !agent.agentType) {
-        patchedAgentTypes.current.add(agentId)
-        api.updateAgentMetadata(agentId, { agentType: detectedType }).then(() => {
-          queryClient.invalidateQueries({ queryKey: ['agents'] })
-        })
-      } else {
-        // Agent already has type, no need to check again
-        patchedAgentTypes.current.add(agentId)
-      }
-    }
-  }, [events, agents, agentMap, queryClient])
-
   // Resolve scroll targets for merged events (PostToolUse → PreToolUse row)
   const { scrollToEventId, setScrollToEventId } = useUIStore()
   useEffect(() => {
@@ -171,7 +131,7 @@ export function EventStream() {
     }
   }, [scrollToEventId, mergedIdMap, setScrollToEventId])
 
-  const showAgentLabel = agentMap.size > 1
+  const showAgentLabel = agents.length > 1
   const scrollRef = useRef<HTMLDivElement>(null)
   const hasInitiallyScrolled = useRef(false)
 

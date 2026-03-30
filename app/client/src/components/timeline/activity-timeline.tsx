@@ -22,8 +22,8 @@ export function ActivityTimeline() {
 
   const { data: sessions } = useSessions(selectedProjectId)
   const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null
-  const { data: agents } = useAgents(effectiveSessionId)
   const { data: events } = useEvents(effectiveSessionId)
+  const agents = useAgents(effectiveSessionId, events)
   const resizing = useRef(false)
   const startY = useRef(0)
   const startHeight = useRef(0)
@@ -41,7 +41,6 @@ export function ActivityTimeline() {
   }, [eventsLength])
 
   const flatAgents = useMemo(() => {
-    if (!agents) return []
     const mainAgents: { agent: Agent; isSubagent: boolean }[] = []
     const nonMainAgents: { agent: Agent; isSubagent: boolean }[] = []
     for (const a of agents) {
