@@ -1,6 +1,8 @@
 # Claude Observe
 
-Real-time observability for Claude Code agents with powerful filtering, searching, and visualization of multi-agent sessions.
+Real-time observability dashboard for Claude Code agents.
+
+Includes powerful filtering, searching, and visualization of multi-agent sessions.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/simple10/claude-observe/main/docs/assets/dashboard1.png" alt="Claude Observe Dashboard Screenshot" />
@@ -10,6 +12,8 @@ Real-time observability for Claude Code agents with powerful filtering, searchin
 </p>
 
 The server and dashboard run locally or remotely, allowing multiple Claude Code instances to log full session data using hooks.
+
+Hooks are used instead of OTEL to capture the full picture of agent actions.
 
 ## Plugin Installation
 
