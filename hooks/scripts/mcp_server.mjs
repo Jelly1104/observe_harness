@@ -8,6 +8,7 @@ import { getConfig } from './lib/config.mjs'
 import { startServer, stopServer } from './lib/docker.mjs'
 
 const config = getConfig()
+const persist = (process.env.CLAUDE_OBSERVE_SERVER_PERSIST || 'true').toLowerCase() !== 'false'
 
 async function main() {
   const actualPort = await startServer(config)
@@ -18,9 +19,10 @@ async function main() {
 
   console.error(`[claude-observe] Dashboard: http://127.0.0.1:${actualPort}`)
 
-  // Handle shutdown
   const cleanup = async () => {
-    await stopServer(config)
+    if (!persist) {
+      await stopServer(config)
+    }
     process.exit(0)
   }
   process.on('SIGTERM', cleanup)
