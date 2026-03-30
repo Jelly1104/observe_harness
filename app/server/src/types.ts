@@ -99,3 +99,8 @@ export type WSMessage =
   | { type: 'agent_update'; data: { id: string; status: string; sessionId: string } }
   | { type: 'session_update'; data: Session }
   | { type: 'project_update'; data: { id: number; name: string } }
+
+// Messages FROM clients
+export type WSClientMessage =
+  | { type: 'subscribe'; sessionId: string }
+  | { type: 'unsubscribe' }
