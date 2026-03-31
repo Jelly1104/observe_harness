@@ -11,9 +11,23 @@ const PORT = config.port
 
 const app = createApp(store, broadcastToSession, broadcastToAll)
 
-const server = serve({ fetch: app.fetch, port: PORT }, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
-  console.log(`POST events: http://localhost:${PORT}/api/events`)
-})
+function start(retries = 3) {
+  const server = serve({ fetch: app.fetch, port: PORT }, () => {
+    console.log(`Server running on http://localhost:${PORT}`)
+    console.log(`POST events: http://localhost:${PORT}/api/events`)
+  })
 
-attachWebSocket(server as unknown as Server)
+  ;(server as unknown as Server).on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE' && retries > 0) {
+      console.log(`Port ${PORT} in use, retrying in 1s... (${retries} left)`)
+      setTimeout(() => start(retries - 1), 1000)
+    } else {
+      console.error(err)
+      process.exit(1)
+    }
+  })
+
+  attachWebSocket(server as unknown as Server)
+}
+
+start()
