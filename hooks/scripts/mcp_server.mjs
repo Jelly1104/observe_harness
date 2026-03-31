@@ -88,4 +88,7 @@ function send(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n')
 }
 
-main()
+main().catch((err) => {
+  log.error(`MCP server failed: ${err.message}`)
+  process.exit(1)
+})

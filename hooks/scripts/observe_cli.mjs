@@ -75,7 +75,7 @@ function hookCommand() {
         if (result.body?.requests) {
           // Handle callback requests from the server
           // Used to patch sessions info
-          handleCallbackRequests(result.body.requests, { config, log })
+          return handleCallbackRequests(result.body.requests, { config, log })
         }
       })
       .catch((err) => {
