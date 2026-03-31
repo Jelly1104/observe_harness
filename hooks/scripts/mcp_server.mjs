@@ -6,18 +6,20 @@
 import { createInterface } from 'node:readline'
 import { getConfig } from './lib/config.mjs'
 import { startServer, stopServer } from './lib/docker.mjs'
+import { createLogger } from './lib/logger.mjs'
 
 const config = getConfig()
+const log = createLogger('mcp.log')
 const persist = (process.env.AGENTS_OBSERVE_SERVER_PERSIST || 'true').toLowerCase() !== 'false'
 
 async function main() {
   const actualPort = await startServer(config)
   if (!actualPort) {
-    console.error('[agents-observe] Failed to start server')
+    log.error('Failed to start server')
     process.exit(1)
   }
 
-  console.error(`[agents-observe] Dashboard: http://127.0.0.1:${actualPort}`)
+  log.info(`Dashboard: http://127.0.0.1:${actualPort}`)
 
   const cleanup = async () => {
     if (!persist) {

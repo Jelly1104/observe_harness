@@ -6,9 +6,11 @@
 import { readFileSync } from 'node:fs'
 import { getConfig } from './lib/config.mjs'
 import { getJson, postJson } from './lib/http.mjs'
+import { createLogger } from './lib/logger.mjs'
 
 const cliArgs = parseArgs(process.argv.slice(2))
 const config = getConfig(cliArgs)
+const log = createLogger('cli.log')
 
 switch (cliArgs.commands[0] || 'hook') {
   case 'hook':
@@ -62,7 +64,7 @@ function hookCommand() {
     if (!Array.isArray(requests)) return
     for (const req of requests) {
       if (allowedCallbacks && !allowedCallbacks.has(req.cmd)) {
-        console.warn(`[agents-observe] Blocked callback: ${req.cmd} (not in AGENTS_OBSERVE_ALLOW_LOCAL_CALLBACKS)`)
+        log.warn(`Blocked callback: ${req.cmd} (not in AGENTS_OBSERVE_ALLOW_LOCAL_CALLBACKS)`)
         continue
       }
       const handler = callbackHandlers[req.cmd]
@@ -95,7 +97,7 @@ function hookCommand() {
     const result = await postJson(`${config.apiBaseUrl}/events`, envelope)
 
     if (result.status === 0) {
-      console.warn(`[agents-observe] Server unreachable at ${config.baseOrigin}: ${result.error}`)
+      log.warn(`Server unreachable at ${config.baseOrigin}: ${result.error}`)
       process.exit(0)
     }
 
