@@ -96,9 +96,9 @@ function getToolSummary(
   switch (toolName) {
     case 'Bash': {
       const desc = toolInput.description;
-      const cmd = toolInput.command;
-      // Prefer description over raw command (more readable)
-      return desc || cmd || '';
+      const cmd = toolInput.command as string | undefined;
+      // Prefer description; collapse multi-line commands into one line
+      return desc || (cmd ? cmd.replace(/\s*\n\s*/g, ' \\n ').trim() : '');
     }
     case 'Read':
     case 'Write':

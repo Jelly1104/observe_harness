@@ -270,6 +270,15 @@ describe('getEventSummary', () => {
       expect(getEventSummary(event)).toBe('npm test')
     })
 
+    it('should collapse multi-line commands with \\n separators', () => {
+      const event = makeEvent({
+        subtype: 'PreToolUse',
+        toolName: 'Bash',
+        payload: { tool_input: { command: 'cat > /tmp/test.js << \'EOF\'\nconsole.log("hello")\nEOF\nnode /tmp/test.js' } },
+      })
+      expect(getEventSummary(event)).toBe('cat > /tmp/test.js << \'EOF\' \\n console.log("hello") \\n EOF \\n node /tmp/test.js')
+    })
+
     it('should return empty for missing input', () => {
       const event = makeEvent({
         subtype: 'PreToolUse',
