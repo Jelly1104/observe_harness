@@ -7,21 +7,36 @@ import { getConfig } from './lib/config.mjs'
 import { getJson, postJson } from './lib/http.mjs'
 import { createLogger } from './lib/logger.mjs'
 import { handleCallbackRequests } from './lib/callbacks.mjs'
-import { startServer } from './lib/docker.mjs'
+import { startServer, stopServer } from './lib/docker.mjs'
 
 const cliArgs = parseArgs(process.argv.slice(2))
 const config = getConfig(cliArgs)
 const log = createLogger('cli.log', config)
 
-switch (cliArgs.commands[0] || 'hook') {
+switch (cliArgs.commands[0] || 'help') {
+  case 'help':
+    console.log('Usage: node observe_cli.mjs <command> [--base-url URL] [--project-slug SLUG]')
+    console.log('Commands: hook, health, start, stop,restart')
+    console.log('  hook: Send an event to the server')
+    console.log('  health: Check the server health')
+    console.log('  start: Restart the server')
+    console.log('  stop: Stop the server')
+    console.log('  restart: Restart the server')
+    process.exit(0)
   case 'hook':
     hookCommand()
     break
   case 'health':
     healthCommand()
     break
+  case 'start':
+    startCommand()
+    break
+  case 'stop':
+    stopCommand()
+    break
   case 'restart':
-    restartCommand()
+    startCommand('Restarting server...')
     break
   default:
     console.error(`Unknown command: ${cliArgs.commands[0]}`)
@@ -93,7 +108,7 @@ function hookCommand() {
  *
  * Used by observe-status skill
  */
-async function healthCommand() {
+async function healthCommand(exit = true) {
   log.trace('CLI health command invoked')
   const healthUrl = `${config.apiBaseUrl}/health`
   const result = await getJson(healthUrl, { log })
@@ -110,7 +125,9 @@ async function healthCommand() {
     console.log(`  Log Level: ${config.logLevel || 'unknown'}`)
     console.log(`  Logs: ${config.logsDir}`)
     console.log(
-      `  Allowed Callbacks: ${config.allowedCallbacks.size ? [...config.allowedCallbacks].join(', ') : 'none'}`,
+      `  Allowed Callbacks: ${
+        config.allowedCallbacks.size ? [...config.allowedCallbacks].join(', ') : 'none'
+      }`,
     )
     console.log('')
     console.log(`Agents Observe Server (${runtime}):`)
@@ -133,34 +150,42 @@ async function healthCommand() {
       console.log(`⚠ Version mismatch: CLI is v${config.expectedVersion}, server is v${b.version}`)
       console.log(`  To update the server, run: node ${config.cliPath} restart`)
     }
-    process.exit(0)
+    exit && process.exit(0)
   } else if (result.status === 0) {
     console.log(`Agents Observe server is not running.`)
     console.log(`  Checked: ${healthUrl}`)
     console.log(`  Error: ${result.error || 'connection refused'}`)
-    process.exit(1)
+    exit && process.exit(1)
   } else {
     console.log(`Agents Observe server error (HTTP ${result.status}):`)
     console.log(JSON.stringify(result.body, null, 2))
-    process.exit(1)
+    exit && process.exit(1)
   }
 }
 
 /**
  * Restart the Docker container (pulls latest image for current CLI version).
  */
-async function restartCommand() {
-  log.info('Restarting server...')
-  const actualPort = await startServer(config)
+async function startCommand(msg = 'Starting server...') {
+  log.info(msg)
+  const actualPort = await startServer(config, log)
   if (actualPort) {
-    console.log(`Server restarted on port ${actualPort}`)
+    await healthCommand(false)
+    console.log(`\nServer started on port ${actualPort}`)
     console.log(`  Dashboard: http://127.0.0.1:${actualPort}`)
   } else {
-    console.error('Failed to restart server')
+    console.error('Failed to start server')
     process.exit(1)
   }
 }
 
+/**
+ * Stop the Docker container (pulls latest image for current CLI version).
+ */
+async function stopCommand() {
+  await stopServer(config, log)
+  log.info('Server stopped')
+}
 // -- Helpers ------------------------------------------------------
 
 function parseArgs(args) {

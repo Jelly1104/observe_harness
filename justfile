@@ -120,6 +120,10 @@ setup-hooks project_slug:
 health:
     node {{ cli_script }} health
 
+# Run the CLI with a command (hook, health, start, stop, restart)
+cli *args:
+    node {{ cli_script }} {{ args }}
+
 # Open the dashboard in browser
 open port=port:
     open http://localhost:{{ port }}
