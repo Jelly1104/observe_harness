@@ -2,7 +2,18 @@
 
 ## QUEUED TASKS
 
-(empty)
+- [ ] Improve search UI
+  - Highlight the search input field when a search is being used - it's too easy right now for the user to visually miss that a search is being used - add a highlight border color to the search field
+  - Add a "x" button to clear the search - currently user has to manually delete the search field contents
+  - Ignore search queries if search field only has spaces - currently a space char triggers a search - be careful not to trim queries, users often want the search to include proceeding or trailing spaces - just don't search on spaces alone
+  - If easy, add a background color to the search text to make it easier to see that a search has proceeding or trailing spaces?
+- [ ] Fix timeline animation bugs - see docs/plans/_queued/spec-timeline-animation-bugs.md
+- [ ] Review PR #5 <https://github.com/simple10/agents-observe/pull/5>
+  - We currently rely on claude to start the mcp server which starts the docker container
+  - Investigate the need for SessionStart to also trigger auto start
+    - This would break the model where user intentionally stopped the mcp server, but might be needed when server auto shuts down due to timeout in activity? MCP server should be keeping the server alive already.
+  - We need a better way of testing fresh installs before pushing new releases
+- [ ] Add CSS for cursor pointers (hand?) to clickable elements in sidebar & activity stream
 
 ## COMPLETED TASKS
 
@@ -91,6 +102,7 @@
 
 Don't implement these yet. They're here for future reference.
 
+- [ ] Implement timeline replay feature; see [spec-timeline-rewind.md](docs/plans/_queued/spec-timeline-rewind.md)
 - [ ] Track token & context window usage per session and agent
   - On Stop hook, use two-way pattern: hook reads transcript JSONL, sums `usage` fields from all assistant messages, posts totals to `/api/sessions/:id/usage` callback
   - Subagent usage already available in PostToolUse:Agent `tool_response` (totalTokens, totalDurationMs, usage breakdown) — just need to surface in UI
