@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { useUIStore } from '@/stores/ui-store'
 import { useEvents } from '@/hooks/use-events'
 import { cn } from '@/lib/utils'
@@ -18,6 +18,26 @@ export function EventFilterBar() {
     selectedSessionId,
     selectedAgentIds,
   } = useUIStore()
+
+  // Local input state for responsive typing; debounce before updating the store
+  const [localSearch, setLocalSearch] = useState(searchQuery)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // Sync local state when store changes externally (e.g., session switch restores saved query)
+  useEffect(() => {
+    setLocalSearch(searchQuery)
+  }, [searchQuery])
+
+  function handleSearchChange(value: string) {
+    setLocalSearch(value)
+    clearTimeout(debounceRef.current)
+    if (value === '') {
+      // Clear immediately — no reason to delay
+      setSearchQuery('')
+    } else {
+      debounceRef.current = setTimeout(() => setSearchQuery(value), 350)
+    }
+  }
 
   const { data: events } = useEvents(selectedSessionId)
 
@@ -77,22 +97,22 @@ export function EventFilterBar() {
         <div className="relative w-48">
           <Search className={cn(
             "absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5",
-            searchQuery ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground',
+            localSearch ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground',
           )} />
           <Input
             placeholder="Search events..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={localSearch}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className={cn(
               'h-7 pl-7 text-xs',
-              searchQuery && 'border-green-600 dark:border-green-400 ring-1 ring-green-600/30 dark:ring-green-400/30',
-              searchQuery && (searchQuery !== searchQuery.trim()) && 'bg-green-600/5 dark:bg-green-400/5',
-              searchQuery && 'pr-7',
+              localSearch && 'border-green-600 dark:border-green-400 ring-1 ring-green-600/30 dark:ring-green-400/30',
+              localSearch && (localSearch !== localSearch.trim()) && 'bg-green-600/5 dark:bg-green-400/5',
+              localSearch && 'pr-7',
             )}
           />
-          {searchQuery && (
+          {localSearch && (
             <button
-              onClick={() => setSearchQuery('')}
+              onClick={() => handleSearchChange('')}
               className="absolute right-1.5 top-1/2 -translate-y-1/2 h-4 w-4 flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground cursor-pointer"
             >
               <X className="h-3 w-3" />
