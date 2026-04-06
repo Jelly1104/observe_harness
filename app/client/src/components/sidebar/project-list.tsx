@@ -155,7 +155,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
                 <TooltipTrigger asChild>
                   <button
                     className={cn(
-                      'flex h-8 w-8 mx-auto items-center justify-center rounded-md text-xs',
+                      'flex h-8 w-8 mx-auto items-center justify-center rounded-md text-xs cursor-pointer',
                       isSelected
                         ? 'bg-primary/10 text-primary border border-primary/30'
                         : 'text-muted-foreground hover:bg-accent',
@@ -174,7 +174,7 @@ export function ProjectList({ collapsed }: ProjectListProps) {
             <div key={project.id}>
               <button
                 className={cn(
-                  'group flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm transition-colors',
+                  'group flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm transition-colors cursor-pointer',
                   isSelected ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-accent',
                 )}
                 onClick={() => !isEditingThis && setSelectedProject(isSelected ? null : project.id, isSelected ? null : project.slug)}
@@ -304,7 +304,7 @@ function SessionList({ projectId }: { projectId: number }) {
                   <div>
                     <button
                       className={cn(
-                        'group flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-xs transition-colors',
+                        'group flex items-center gap-1.5 w-full rounded-md px-2 py-1 text-xs transition-colors cursor-pointer',
                         isSelected
                           ? 'bg-accent text-accent-foreground'
                           : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',

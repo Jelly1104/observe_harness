@@ -126,7 +126,7 @@ export const EventRow = memo(function EventRow({ event, agentMap, agentColorMap,
     <div ref={combinedRef} className={cn('transition-shadow', isSelected && 'ring-1 ring-primary/40')}>
       <button
         className={cn(
-          'flex flex-col w-full text-left px-3 py-1.5 border-l-2 transition-colors hover:bg-accent/50 overflow-hidden',
+          'flex flex-col w-full text-left px-3 py-1.5 border-l-2 transition-colors hover:bg-accent/50 overflow-hidden cursor-pointer',
           isSubagent ? 'bg-muted/20' : '',
           isSelected
             ? 'border-l-primary bg-primary/[0.07] dark:bg-primary/[0.12]'
