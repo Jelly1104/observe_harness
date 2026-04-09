@@ -1,7 +1,7 @@
 // app/server/src/storage/sqlite-adapter.ts
 
 import Database from 'better-sqlite3'
-import type { EventStore, InsertEventParams, EventFilters, StoredEvent } from './types'
+import type { EventStore, InsertEventParams, EventFilters, StoredEvent, OtelEvent, OtelMetric, OtelSpan, OtelSummary } from './types'
 
 export class SqliteAdapter implements EventStore {
   private db: Database.Database
@@ -77,6 +77,59 @@ export class SqliteAdapter implements EventStore {
       )
     `)
 
+    // ── OTel tables ──────────────────────────────────────────────────────────
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS otel_events (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id            TEXT,
+        prompt_id             TEXT,
+        event_name            TEXT NOT NULL,
+        timestamp             INTEGER NOT NULL,
+        attributes            TEXT NOT NULL DEFAULT '{}',
+        tool_name             TEXT,
+        model                 TEXT,
+        cost_usd              REAL,
+        duration_ms           INTEGER,
+        input_tokens          INTEGER,
+        output_tokens         INTEGER,
+        cache_read_tokens     INTEGER,
+        cache_creation_tokens INTEGER,
+        success               TEXT,
+        created_at            INTEGER NOT NULL
+      )
+    `)
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS otel_metrics (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id  TEXT,
+        metric_name TEXT NOT NULL,
+        value       REAL NOT NULL,
+        unit        TEXT,
+        attributes  TEXT NOT NULL DEFAULT '{}',
+        timestamp   INTEGER NOT NULL,
+        created_at  INTEGER NOT NULL
+      )
+    `)
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS otel_spans (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        trace_id       TEXT NOT NULL,
+        span_id        TEXT NOT NULL,
+        parent_span_id TEXT,
+        session_id     TEXT,
+        name           TEXT NOT NULL,
+        kind           TEXT,
+        start_time     INTEGER NOT NULL,
+        end_time       INTEGER,
+        duration_ms    INTEGER,
+        status         TEXT,
+        attributes     TEXT NOT NULL DEFAULT '{}',
+        created_at     INTEGER NOT NULL
+      )
+    `)
+
     // Create indexes
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_transcript_path ON projects(transcript_path)')
@@ -88,6 +141,15 @@ export class SqliteAdapter implements EventStore {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)')
+
+    // OTel indexes
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_events_session ON otel_events(session_id, timestamp)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_events_prompt ON otel_events(prompt_id)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_events_name ON otel_events(event_name)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_metrics_session ON otel_metrics(session_id, timestamp)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_metrics_name ON otel_metrics(metric_name, timestamp)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_spans_trace ON otel_spans(trace_id)')
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_spans_session ON otel_spans(session_id, start_time)')
   }
 
   async createProject(slug: string, name: string, transcriptPath: string | null): Promise<number> {
@@ -469,5 +531,126 @@ export class SqliteAdapter implements EventStore {
     } catch (err: any) {
       return { ok: false, error: err.message || 'Unknown database error' }
     }
+  }
+
+  // ── OTel methods ────────────────────────────────────────────────────────
+
+  async insertOtelEvent(params: Omit<OtelEvent, 'id'>): Promise<number> {
+    const result = this.db.prepare(`
+      INSERT INTO otel_events
+        (session_id, prompt_id, event_name, timestamp, attributes,
+         tool_name, model, cost_usd, duration_ms, input_tokens, output_tokens,
+         cache_read_tokens, cache_creation_tokens, success, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      params.session_id, params.prompt_id, params.event_name, params.timestamp,
+      params.attributes, params.tool_name, params.model, params.cost_usd,
+      params.duration_ms, params.input_tokens, params.output_tokens,
+      params.cache_read_tokens, params.cache_creation_tokens, params.success,
+      params.created_at,
+    )
+    return result.lastInsertRowid as number
+  }
+
+  async insertOtelMetric(params: Omit<OtelMetric, 'id'>): Promise<number> {
+    const result = this.db.prepare(`
+      INSERT INTO otel_metrics (session_id, metric_name, value, unit, attributes, timestamp, created_at)
+      VALUES (?,?,?,?,?,?,?)
+    `).run(
+      params.session_id, params.metric_name, params.value, params.unit,
+      params.attributes, params.timestamp, params.created_at,
+    )
+    return result.lastInsertRowid as number
+  }
+
+  async insertOtelSpan(params: Omit<OtelSpan, 'id'>): Promise<number> {
+    const result = this.db.prepare(`
+      INSERT INTO otel_spans
+        (trace_id, span_id, parent_span_id, session_id, name, kind,
+         start_time, end_time, duration_ms, status, attributes, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      params.trace_id, params.span_id, params.parent_span_id, params.session_id,
+      params.name, params.kind, params.start_time, params.end_time,
+      params.duration_ms, params.status, params.attributes, params.created_at,
+    )
+    return result.lastInsertRowid as number
+  }
+
+  async getOtelSummaryForSession(sessionId: string): Promise<OtelSummary> {
+    const now = Date.now()
+
+    // Aggregate cost and tokens from api_request events
+    const apiRows = this.db.prepare(`
+      SELECT model, cost_usd, duration_ms, input_tokens, output_tokens,
+             cache_read_tokens, cache_creation_tokens
+      FROM otel_events
+      WHERE session_id = ? AND event_name = 'claude_code.api_request'
+    `).all(sessionId) as any[]
+
+    let totalCost = 0
+    let totalInput = 0
+    let totalOutput = 0
+    let totalCacheRead = 0
+    let totalCacheCreation = 0
+    let totalDuration = 0
+    let durationCount = 0
+    const modelMap: Record<string, { cost: number; requests: number; tokens: number }> = {}
+
+    for (const r of apiRows) {
+      totalCost += r.cost_usd ?? 0
+      totalInput += r.input_tokens ?? 0
+      totalOutput += r.output_tokens ?? 0
+      totalCacheRead += r.cache_read_tokens ?? 0
+      totalCacheCreation += r.cache_creation_tokens ?? 0
+      if (r.duration_ms != null) { totalDuration += r.duration_ms; durationCount++ }
+      if (r.model) {
+        if (!modelMap[r.model]) modelMap[r.model] = { cost: 0, requests: 0, tokens: 0 }
+        modelMap[r.model].cost += r.cost_usd ?? 0
+        modelMap[r.model].requests += 1
+        modelMap[r.model].tokens += (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
+      }
+    }
+
+    // Tool costs from tool_result events with a prompt_id
+    const toolRows = this.db.prepare(`
+      SELECT prompt_id, tool_name, cost_usd, duration_ms
+      FROM otel_events
+      WHERE session_id = ? AND event_name = 'claude_code.tool_result'
+      ORDER BY timestamp ASC
+      LIMIT 200
+    `).all(sessionId) as any[]
+
+    return {
+      totalCost,
+      totalTokens: { input: totalInput, output: totalOutput, cacheRead: totalCacheRead, cacheCreation: totalCacheCreation },
+      apiRequestCount: apiRows.length,
+      avgLatencyMs: durationCount > 0 ? Math.round(totalDuration / durationCount) : null,
+      modelBreakdown: modelMap,
+      toolCosts: toolRows.map((r) => ({
+        promptId: r.prompt_id,
+        toolName: r.tool_name,
+        cost: r.cost_usd,
+        durationMs: r.duration_ms,
+      })),
+    }
+  }
+
+  async getOtelEventsForSession(
+    sessionId: string,
+    filters?: { eventName?: string; promptId?: string; limit?: number },
+  ): Promise<OtelEvent[]> {
+    const conditions: string[] = ['session_id = ?']
+    const bindings: any[] = [sessionId]
+
+    if (filters?.eventName) { conditions.push('event_name = ?'); bindings.push(filters.eventName) }
+    if (filters?.promptId) { conditions.push('prompt_id = ?'); bindings.push(filters.promptId) }
+
+    const limit = filters?.limit ?? 500
+    bindings.push(limit)
+
+    return this.db.prepare(
+      `SELECT * FROM otel_events WHERE ${conditions.join(' AND ')} ORDER BY timestamp ASC LIMIT ?`
+    ).all(...bindings) as OtelEvent[]
   }
 }

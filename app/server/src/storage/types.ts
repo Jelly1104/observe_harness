@@ -36,6 +36,68 @@ export interface StoredEvent {
   payload: string // JSON string in DB
 }
 
+// ── OTel data types ────────────────────────────────────────────────────────
+
+export interface OtelEvent {
+  id?: number
+  session_id: string | null
+  prompt_id: string | null
+  event_name: string
+  timestamp: number          // Unix ms
+  attributes: string         // JSON
+  tool_name: string | null
+  model: string | null
+  cost_usd: number | null
+  duration_ms: number | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_creation_tokens: number | null
+  success: string | null
+  created_at: number
+}
+
+export interface OtelMetric {
+  id?: number
+  session_id: string | null
+  metric_name: string
+  value: number
+  unit: string | null
+  attributes: string         // JSON
+  timestamp: number          // Unix ms
+  created_at: number
+}
+
+export interface OtelSpan {
+  id?: number
+  trace_id: string
+  span_id: string
+  parent_span_id: string | null
+  session_id: string | null
+  name: string
+  kind: string | null
+  start_time: number         // Unix ns
+  end_time: number | null
+  duration_ms: number | null
+  status: string | null
+  attributes: string         // JSON
+  created_at: number
+}
+
+export interface OtelSummary {
+  totalCost: number
+  totalTokens: { input: number; output: number; cacheRead: number; cacheCreation: number }
+  apiRequestCount: number
+  avgLatencyMs: number | null
+  modelBreakdown: Record<string, { cost: number; requests: number; tokens: number }>
+  toolCosts: Array<{
+    promptId: string | null
+    toolName: string | null
+    cost: number | null
+    durationMs: number | null
+  }>
+}
+
 export interface EventStore {
   createProject(slug: string, name: string, transcriptPath: string | null): Promise<number>
   getProjectBySlug(slug: string): Promise<any | null>
@@ -77,4 +139,11 @@ export interface EventStore {
   clearSessionEvents(sessionId: string): Promise<void>
   getRecentSessions(limit?: number): Promise<any[]>
   healthCheck(): Promise<{ ok: boolean; error?: string }>
+
+  // OTel
+  insertOtelEvent(params: Omit<OtelEvent, 'id'>): Promise<number>
+  insertOtelMetric(params: Omit<OtelMetric, 'id'>): Promise<number>
+  insertOtelSpan(params: Omit<OtelSpan, 'id'>): Promise<number>
+  getOtelSummaryForSession(sessionId: string): Promise<OtelSummary>
+  getOtelEventsForSession(sessionId: string, filters?: { eventName?: string; promptId?: string; limit?: number }): Promise<OtelEvent[]>
 }

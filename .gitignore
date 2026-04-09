@@ -41,3 +41,7 @@ bak/
 .justfile.swp
 
 .tmp/
+
+# Local runtime artifacts
+.run-logs/
+app/server/data.sqlite

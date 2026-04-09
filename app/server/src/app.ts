@@ -14,6 +14,9 @@ import agentsRouter from './routes/agents'
 import adminRouter from './routes/admin'
 import healthRouter from './routes/health'
 import consumerRouter from './routes/consumer'
+import hooksConfigRouter from './routes/hooks-config'
+import skillsConfigRouter from './routes/skills-config'
+import otelIngestRouter from './routes/otel-ingest'
 
 type Env = {
   Variables: {
@@ -47,6 +50,11 @@ export function createApp(
   app.route('/api', adminRouter)
   app.route('/api', healthRouter)
   app.route('/api', consumerRouter)
+  app.route('/api', hooksConfigRouter)
+  app.route('/api', skillsConfigRouter)
+
+  // OTLP ingest — registered at root (not /api) to match standard OTLP paths
+  app.route('', otelIngestRouter)
 
   // Serve built client static files when clientDistPath is configured
   const clientDistPath = config.clientDistPath

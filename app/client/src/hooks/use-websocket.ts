@@ -70,6 +70,12 @@ export function useWebSocket(sessionId: string | null) {
       if (logLevel === 'trace') {
         console.debug('[WS] Project update → invalidating projects cache')
       }
+    } else if (msg.type === 'otel_event') {
+      // Invalidate OTel summary so cost/token badges refresh in real-time
+      const sid = sessionIdRef.current
+      if (sid) {
+        queryClient.invalidateQueries({ queryKey: ['otel-summary', sid] })
+      }
     }
   }, [queryClient])
 

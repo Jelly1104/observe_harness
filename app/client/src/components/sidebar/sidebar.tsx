@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { PanelLeftClose, PanelLeftOpen, Moon, Sun, Wifi, WifiOff, Settings } from 'lucide-react'
+import { PanelLeftClose, PanelLeftOpen, Moon, Sun, Wifi, WifiOff, Settings, GitBranch } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/ui-store'
 import { useTheme } from '@/components/theme-provider'
@@ -107,6 +107,11 @@ export function Sidebar({ connected }: SidebarProps) {
         </Button>
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSettingsOpen(true)}>
           <Settings className="h-3.5 w-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="Sequence Diagram">
+          <a href="/diagram.html" target="_blank" rel="noopener noreferrer">
+            <GitBranch className="h-3.5 w-3.5" />
+          </a>
         </Button>
         {!sidebarCollapsed && (
           <div className="flex items-center gap-1.5 ml-auto text-xs text-muted-foreground">

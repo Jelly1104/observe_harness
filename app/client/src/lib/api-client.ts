@@ -70,4 +70,56 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     }),
+  getSkillsConfig: (cwd?: string) => {
+    const params = cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''
+    return fetchJson<{ skills: Array<{
+      name: string; context: string; source: string
+    }> }>(`/skills-config${params}`)
+  },
+  getHooksConfig: (cwd?: string) => {
+    const params = cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''
+    return fetchJson<{ hooks: Array<{
+      event: string; matcher?: string; command: string; line: number; source: string
+    }> }>(`/hooks-config${params}`)
+  },
+  getOtelSummary: (sessionId: string) =>
+    fetchJson<OtelSummary>(`/sessions/${encodeURIComponent(sessionId)}/otel-summary`),
+  getOtelEvents: (sessionId: string, filters?: { eventName?: string; promptId?: string; limit?: number }) => {
+    const params = new URLSearchParams()
+    if (filters?.eventName) params.set('event_name', filters.eventName)
+    if (filters?.promptId) params.set('prompt_id', filters.promptId)
+    if (filters?.limit) params.set('limit', String(filters.limit))
+    const qs = params.toString()
+    return fetchJson<OtelEvent[]>(
+      `/sessions/${encodeURIComponent(sessionId)}/otel-events${qs ? `?${qs}` : ''}`
+    )
+  },
 };
+
+// OTel types (mirrored from server)
+export interface OtelSummary {
+  totalCost: number
+  totalTokens: { input: number; output: number; cacheRead: number; cacheCreation: number }
+  apiRequestCount: number
+  avgLatencyMs: number | null
+  modelBreakdown: Record<string, { cost: number; requests: number; tokens: number }>
+  toolCosts: Array<{ promptId: string | null; toolName: string | null; cost: number | null; durationMs: number | null }>
+}
+
+export interface OtelEvent {
+  id: number
+  session_id: string | null
+  prompt_id: string | null
+  event_name: string
+  timestamp: number
+  attributes: string
+  tool_name: string | null
+  model: string | null
+  cost_usd: number | null
+  duration_ms: number | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_creation_tokens: number | null
+  success: string | null
+}

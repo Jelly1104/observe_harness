@@ -75,6 +75,12 @@ This matters because:
 - Expand any event to see the full payload, command, and result
 - Click timeline icons to jump to specific events in the stream
 - Browse historical sessions with human-readable names (e.g., "twinkly-hugging-dragon")
+- **View sequence diagrams** (`/diagram.html`) — Mermaid-based flow visualization with:
+  - Agent spawn hierarchy (Claude → Explore, Designer, Coder, ImLeader, etc.)
+  - Tool calls grouped by type (Read x13, Bash x3) with results (file paths, stdout summary)
+  - Cross-agent artifact flow (HANDOFF.md → SDD.md → Code)
+  - Context Compact boundaries marked with dividers
+  - Zoom/pan controls, Detail/Merge/Artifacts toggles
 
 ## Architecture
 
@@ -84,6 +90,27 @@ Claude Code Hooks  →  observe_cli.mjs  →  API Server (SQLite)  →  React Da
 ```
 
 The hook script is a dumb pipe — it reads the raw event from stdin, adds the project name, and POSTs it to the server. The server parses events, stores agent metadata (name, type, parentage), and forwards events to subscribed WebSocket clients. The React dashboard derives all agent state (status, event counts, timing) from the event stream — the server is a dumb store.
+
+## Quick Start (single-port runner)
+
+단일 명령어로 API 서버 + 빌드된 클라이언트를 **한 포트(`:4981`)**에서 띄우는 헬퍼 스크립트:
+
+```bash
+/Users/m2-mini/Desktop/eunah/observability-tools/tool-b/run-observe.sh           # 필요 시 빌드 + 기동
+/Users/m2-mini/Desktop/eunah/observability-tools/tool-b/run-observe.sh rebuild   # 강제 재빌드 후 기동 (클라이언트 코드 변경 시)
+/Users/m2-mini/Desktop/eunah/observability-tools/tool-b/run-observe.sh restart
+/Users/m2-mini/Desktop/eunah/observability-tools/tool-b/run-observe.sh stop
+/Users/m2-mini/Desktop/eunah/observability-tools/tool-b/run-observe.sh status
+/Users/m2-mini/Desktop/eunah/observability-tools/tool-b/run-observe.sh logs
+```
+
+- 접속: <http://localhost:4981> (UI + API 동일 포트)
+- 서버: `tsx watch src/index.ts` — 서버 코드는 자동 리로드
+- 클라이언트: `vite build` 산출물(`app/client/dist`)을 서버가 `AGENTS_OBSERVE_CLIENT_DIST_PATH` 로 직접 서빙
+- 로그/PID: `tool-b/.run-logs/observe.{log,pid}`
+- 기존 포트 점유 시 자동 kill 후 재기동
+
+> dev 모드로 두 포트(서버 4981 + vite 5180) 로 돌리려면 아래 Standalone 섹션 참고.
 
 ## Standalone Installation
 

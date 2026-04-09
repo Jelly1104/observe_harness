@@ -7,5 +7,6 @@ export function useEvents(sessionId: string | null) {
     queryFn: () => api.getEvents(sessionId!),
     enabled: !!sessionId,
     refetchInterval: false,
+    staleTime: Infinity,  // Keep fresh until session changes
   })
 }

@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tool Calling Sequence Diagram</title>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      sequence: {
+        mirrorActors: true,
+        width: 200,
+        height: 36,
+        useMaxWidth: false,
+        noteMargin: 10,
+        actorMargin: 80,
+        messageFontSize: 12,
+        noteFontSize: 11,
+      }
+    });
+    window.__mermaid = mermaid;
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: #161b22; border-bottom: 1px solid #30363d; flex-wrap: wrap; flex-shrink: 0; z-index: 10; }
+    header h1 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    header select { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 5px 10px; font-size: 12px; min-width: 280px; }
+    .controls { display: flex; gap: 6px; align-items: center; }
+    label { font-size: 11px; color: #8b949e; cursor: pointer; user-select: none; }
+    .btn { border: none; border-radius: 5px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+    .btn-primary { background: #238636; color: #fff; }
+    .btn-primary:hover { background: #2ea043; }
+    .btn-secondary { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; }
+    .btn-secondary:hover { background: #30363d; }
+    .btn-icon { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 16px; border-radius: 5px; cursor: pointer; }
+    .btn-icon:hover { background: #30363d; }
+    #status { padding: 6px 20px; font-size: 11px; color: #8b949e; background: #161b22; border-bottom: 1px solid #30363d; flex-shrink: 0; display: flex; justify-content: space-between; }
+    #zoom-info { color: #58a6ff; }
+    #viewport { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+    #viewport.dragging { cursor: grabbing; }
+    #diagram-wrap { transform-origin: 0 0; position: absolute; top: 0; left: 0; display: flex; gap: 0; align-items: flex-start; }
+    .segment { flex-shrink: 0; position: relative; }
+    .segment-label { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #58a6ff; background: #0d1117; padding: 2px 8px; border-radius: 4px; border: 1px solid #30363d; white-space: nowrap; z-index: 2; }
+    .segment svg { display: block; max-width: none !important; }
+    .segment-divider { width: 3px; flex-shrink: 0; background: linear-gradient(to bottom, transparent 0%, #d29922 10%, #d29922 90%, transparent 100%); min-height: 200px; align-self: stretch; border-radius: 2px; }
+    .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #484f58; font-size: 14px; }
+    .zoom-controls { position: absolute; bottom: 50px; right: 20px; display: flex; flex-direction: column; gap: 4px; z-index: 5; }
+    .legend { display: flex; gap: 16px; padding: 8px 20px; background: #161b22; border-top: 1px solid #30363d; font-size: 10px; color: #8b949e; flex-shrink: 0; flex-wrap: wrap; }
+    .legend span { display: flex; align-items: center; gap: 3px; }
+    .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-left: 8px; }
+    .tab { background: #21262d; border: 1px solid #30363d; color: #8b949e; padding: 5px 12px; font-size: 12px; border-radius: 5px 5px 0 0; cursor: pointer; }
+    .tab.active { background: #0d1117; color: #58a6ff; border-bottom-color: #0d1117; }
+    /* Timeline table view */
+    #table-view { flex: 1; overflow: auto; display: none; background: #0d1117; }
+    #table-view table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: 'SF Mono', Menlo, monospace; }
+    #table-view thead { position: sticky; top: 0; background: #161b22; z-index: 1; }
+    #table-view th { text-align: left; padding: 6px 8px; color: #8b949e; font-weight: 500; border-bottom: 1px solid #30363d; font-size: 10px; text-transform: uppercase; }
+    #table-view td { padding: 5px 8px; border-bottom: 1px solid #1c2128; vertical-align: middle; }
+    #table-view tr.row-event { cursor: pointer; border-left: 3px solid transparent; }
+    #table-view tr.row-event:hover td { background: #161b22; }
+    #table-view tr.row-event.sub td:first-child { padding-left: 24px; }
+    #table-view tr.row-event.sub td.col-agent::before { content: '└ '; color: #6e7681; }
+    #table-view tr.expanded td { background: #161b22; }
+    /* Category accent: left border on first cell via box-shadow */
+    #table-view tr.cat-git td:first-child { box-shadow: inset 3px 0 0 #a371f7; }
+    #table-view tr.cat-skill td:first-child { box-shadow: inset 3px 0 0 #ffd93d; }
+    #table-view tr.cat-web td:first-child { box-shadow: inset 3px 0 0 #79c0ff; }
+    #table-view tr.cat-mcp td:first-child { box-shadow: inset 3px 0 0 #6cb4ee; }
+    #table-view tr.cat-dir td:first-child { box-shadow: inset 3px 0 0 #6e7681; }
+    #table-view tr.cat-agent td:first-child { box-shadow: inset 3px 0 0 #bc8cff; }
+    #table-view tr.cat-doc td:first-child { box-shadow: inset 3px 0 0 #7ee787; }
+    #table-view tr.cat-fileops td:first-child { box-shadow: inset 3px 0 0 #58a6ff; }
+    #table-view tr.cat-bash td:first-child { box-shadow: inset 3px 0 0 #f78166; }
+    #table-view tr.cat-search td:first-child { box-shadow: inset 3px 0 0 #7ee787; }
+    #table-view tr.cat-hook td:first-child { box-shadow: inset 3px 0 0 #d2a8ff; }
+    #table-view tr.cat-other td:first-child { box-shadow: inset 3px 0 0 #30363d; }
+    #table-view tr.evt-post td { opacity: 0.55; }
+    #table-view tr.evt-error td { background: #2d1517; }
+    #table-view tr.row-detail { display: none; }
+    #table-view tr.row-detail.show { display: table-row; }
+    #table-view tr.row-detail td { background: #0a0e14 !important; padding: 0; }
+    #table-view tr.row-detail pre { font-size: 10px; padding: 12px 16px; margin: 0; color: #8b949e; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-word; max-width: calc(100vw - 40px); }
+    #table-view .col-time { color: #6e7681; white-space: nowrap; width: 90px; font-size: 10px; }
+    #table-view .col-agent { color: #bc8cff; width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #table-view .col-type { color: #58a6ff; width: 110px; font-size: 10px; }
+    #table-view .col-tool { color: #e6edf3; width: 140px; font-weight: 600; white-space: nowrap; }
+    #table-view .col-detail { color: #c9d1d9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 1px; }
+    #table-view .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 600; margin-right: 4px; }
+    #table-view input.filter { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 4px 8px; font-size: 11px; border-radius: 4px; width: 220px; }
+    #table-view .filter-bar { display: flex; gap: 8px; padding: 8px 12px; background: #161b22; border-bottom: 1px solid #30363d; position: sticky; top: 0; z-index: 2; align-items: center; }
+    /* Mermaid SVG hover */
+    #viewport svg text { cursor: help; }
+    #viewport svg text:hover { opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Sequence Diagram</h1>
+    <select id="session-select"><option value="">Loading sessions...</option></select>
+    <div class="controls">
+      <label><input type="checkbox" id="show-detail" /> Detail</label>
+      <label><input type="checkbox" id="merge-post" checked /> Merge</label>
+      <label><input type="checkbox" id="show-artifacts" checked /> Artifacts</label>
+      <button class="btn btn-primary" id="btn-refresh">Refresh</button>
+      <button class="btn btn-secondary" id="btn-copy">Copy</button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-view="diagram">Diagram</button>
+      <button class="tab" data-view="table">Timeline</button>
+    </div>
+  </header>
+  <div id="status"><span id="status-text"></span><span id="zoom-info"></span></div>
+
+  <div id="table-view">
+    <div class="filter-bar">
+      <input type="text" class="filter" id="table-filter" placeholder="Filter (file path, tool, agent, type)..." />
+      <span style="font-size:10px;color:#8b949e" id="table-count"></span>
+      <span style="font-size:10px;color:#6e7681;margin-left:auto;display:flex;gap:10px;align-items:center">
+        <span style="opacity:0.55">▪ dimmed = PostToolUse (tool response)</span>
+        <span style="color:#f85149">▪ red = Error</span>
+        <span>▪ left stripe = category</span>
+        <span>▪ └ = subagent</span>
+        <span style="color:#8b949e">| Click row to expand</span>
+      </span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="col-time">Time (Δms)</th>
+          <th class="col-agent">Agent</th>
+          <th class="col-type">Event</th>
+          <th class="col-tool">Tool</th>
+          <th class="col-detail">Detail</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+  <div id="viewport">
+    <div id="diagram-wrap"><div class="empty" style="width:100vw;height:80vh">Select a session</div></div>
+    <div class="zoom-controls">
+      <button class="btn btn-icon" id="btn-zin" title="Zoom in">+</button>
+      <button class="btn btn-icon" id="btn-zout" title="Zoom out">-</button>
+      <button class="btn btn-icon" id="btn-fit" title="Fit to window" style="font-size:11px">Fit</button>
+      <button class="btn btn-icon" id="btn-reset" title="Reset zoom" style="font-size:10px">1:1</button>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:#58a6ff"></span> File ops</span>
+    <span><span class="dot" style="background:#79c0ff"></span> Web</span>
+    <span><span class="dot" style="background:#7ee787"></span> Search</span>
+    <span><span class="dot" style="background:#bc8cff"></span> [A] Agent</span>
+    <span><span class="dot" style="background:#7ee787"></span> [DOC] Docs (.md)</span>
+    <span><span class="dot" style="background:#f78166"></span> Bash</span>
+    <span><span class="dot" style="background:#ffd93d"></span> Skill</span>
+    <span><span class="dot" style="background:#a371f7"></span> Git</span>
+    <span><span class="dot" style="background:#6cb4ee"></span> MCP</span>
+    <span><span class="dot" style="background:#3fb950"></span> Prompt</span>
+    <span><span class="dot" style="background:#ff7b72"></span> PROTO</span>
+    <span><span class="dot" style="background:#f0883e"></span> Artifact</span>
+    <span><span class="dot" style="background:#d2a8ff"></span> Hook</span>
+    <span><span class="dot" style="background:#6e7681"></span> Dir</span>
+    <span><span class="dot" style="background:#da3633"></span> Blocked</span>
+    <span><span class="dot" style="background:#f0883e"></span> Error</span>
+  </div>
+
+  <script type="module">
+    const mermaid = window.__mermaid;
+    const sessionSelect = document.getElementById('session-select');
+    const viewport = document.getElementById('viewport');
+    const wrap = document.getElementById('diagram-wrap');
+    const statusText = document.getElementById('status-text');
+    const zoomInfo = document.getElementById('zoom-info');
+    const showDetail = document.getElementById('show-detail');
+    const mergePost = document.getElementById('merge-post');
+    const showArtifacts = document.getElementById('show-artifacts');
+    let currentMermaid = '';
+
+    // ===================== ZOOM & PAN =====================
+    let scale = 1, panX = 0, panY = 0;
+    function applyTransform() {
+      wrap.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      zoomInfo.textContent = `${Math.round(scale * 100)}%`;
+    }
+    function zoom(delta, cx, cy) {
+      const prev = scale;
+      scale = Math.max(0.05, Math.min(3, scale * (1 + delta)));
+      const ratio = scale / prev;
+      panX = cx - ratio * (cx - panX);
+      panY = cy - ratio * (cy - panY);
+      applyTransform();
+    }
+    function fitToWindow() {
+      const vw = viewport.clientWidth, vh = viewport.clientHeight;
+      const ww = wrap.scrollWidth / scale, wh = wrap.scrollHeight / scale;
+      if (!ww || !wh) return;
+      scale = Math.min(vw / ww, vh / wh, 1.5) * 0.92;
+      panX = Math.max(0, (vw - ww * scale) / 2);
+      panY = 10;
+      applyTransform();
+    }
+    function resetZoom() { scale = 1; panX = 0; panY = 0; applyTransform(); }
+
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      zoom(e.deltaY > 0 ? -0.08 : 0.08, e.clientX - rect.left, e.clientY - rect.top);
+    }, { passive: false });
+
+    let dragging = false, dsx, dsy, psx, psy;
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      dragging = true; viewport.classList.add('dragging');
+      dsx = e.clientX; dsy = e.clientY; psx = panX; psy = panY;
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      panX = psx + (e.clientX - dsx); panY = psy + (e.clientY - dsy);
+      applyTransform();
+    });
+    window.addEventListener('mouseup', () => { dragging = false; viewport.classList.remove('dragging'); });
+
+    document.getElementById('btn-zin').addEventListener('click', () => { const r = viewport.getBoundingClientRect(); zoom(0.2, r.width/2, r.height/2); });
+    document.getElementById('btn-zout').addEventListener('click', () => { const r = viewport.getBoundingClientRect(); zoom(-0.2, r.width/2, r.height/2); });
+    document.getElementById('btn-fit').addEventListener('click', fitToWindow);
+    document.getElementById('btn-reset').addEventListener('click', resetZoom);
+
+    // ===================== API =====================
+    const api = (path) => fetch(`/api${path}`).then(r => r.json());
+
+    async function loadSessions() {
+      try {
+        const sessions = await api('/sessions/recent?limit=50');
+        sessionSelect.innerHTML = '<option value="">-- Select session --</option>';
+        for (const s of sessions) {
+          const t = new Date(s.startedAt).toLocaleString('ko-KR', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = `${s.projectSlug || '?'} | ${s.slug || s.id.slice(0,8)} (${s.eventCount} ev, ${t})`;
+          sessionSelect.appendChild(opt);
+        }
+      } catch (e) { sessionSelect.innerHTML = '<option>Error</option>'; }
+    }
+
+    // ===================== HELPERS =====================
+    function descTool(name, input) {
+      if (!input) return '';
+      switch (name) {
+        case 'Read': case 'Write': case 'Edit': {
+          const path = input.file_path || '';
+          // Show full path for read verification
+          return path;
+        }
+        case 'Glob': return input.pattern || '';
+        case 'Grep': return input.pattern ? `/${input.pattern}/` : '';
+        case 'Bash': {
+          const cmd = input.command || input.description || '';
+          const gitMatch = cmd.match(/^git\s+(\S+)/);
+          if (gitMatch) return `git ${gitMatch[1]}`;
+          return trunc(cmd, 35);
+        }
+        case 'Agent': return `${input.subagent_type || 'agent'} ${trunc(input.description || '', 25)}`;
+        case 'WebSearch': return trunc(input.query || '', 30);
+        case 'WebFetch': return trunc(input.url || '', 30);
+        case 'TodoWrite': return 'tasks';
+        case 'Skill': {
+          const skill = input.skill || '';
+          const args = input.args || '';
+          return skill ? (args ? `${skill} ${trunc(args, 20)}` : skill) : '';
+        }
+        case 'CwdChg': {
+          const cwd = input.cwd || input.path || '';
+          return shortPath(cwd);
+        }
+        default: return name?.startsWith('mcp__') ? name.split('__').pop() : '';
+      }
+    }
+
+    function isGitCommand(input) {
+      if (!input) return false;
+      const cmd = input.command || input.description || '';
+      return cmd.trim().startsWith('git ');
+    }
+
+    function getToolCategory(toolName, input) {
+      if (toolName === 'Skill') return 'skill';
+      if (toolName === 'Agent') return 'agent';
+      if (toolName === 'Bash' && isGitCommand(input)) return 'git';
+      if (toolName === 'Bash') return 'bash';
+      if (toolName === 'WebSearch' || toolName === 'WebFetch') return 'web';
+      if (toolName?.startsWith('mcp__')) return 'mcp';
+      if (toolName === 'CwdChg') return 'dir';
+      if (toolName === 'Grep' || toolName === 'Glob') return 'search';
+      if (toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') {
+        const fp = input?.file_path || '';
+        if (/\.(md|mdx|rst|txt)$/i.test(fp)) return 'doc';
+        return 'fileops';
+      }
+      return 'other';
+    }
+
+    function getCategoryLabel(category) {
+      const labels = { fileops: 'File ops', web: 'Web', search: 'Search', agent: 'Agent', bash: 'Bash', skill: 'Skill', git: 'Git', mcp: 'MCP', dir: 'Dir', other: 'Other' };
+      return labels[category] || category;
+    }
+    // Detect strategy-ai-lab protocol files
+    const PROTOCOL_PATTERNS = [
+      /\.claude\/rules\//,
+      /\.claude\/workflows\//,
+      /\.claude\/context\//,
+      /\.claude\/agents\//,
+      /\.claude\/project\//,
+      /\.claude\/plugins\//,
+      /\.claude\/CLAUDE\.md/,
+      /\.claude\/SYSTEM_MANIFEST\.md/,
+      /\.claude\/FOLDER_STRUCTURE\.md/,
+      /CLAUDE\.md$/,
+    ];
+    function isProtocolFile(filePath) {
+      if (!filePath) return false;
+      return PROTOCOL_PATTERNS.some(p => p.test(filePath));
+    }
+    function shortPath(p) { if (!p) return ''; const s = p.split('/'); return s.length > 2 ? '.../' + s.slice(-2).join('/') : p; }
+    function summarizeResponse(toolName, resp) {
+      if (!resp || typeof resp !== 'object') return '';
+      switch (toolName) {
+        case 'Bash': {
+          const out = (resp.stdout || '').trim();
+          if (!out) return resp.stderr ? 'stderr' : 'empty';
+          const first = out.split('\n')[0];
+          return trunc(first, 40);
+        }
+        case 'Read': return resp.type === 'file_unchanged' ? 'unchanged' : shortPath(resp.file?.filePath || '');
+        case 'Edit': return shortPath(resp.filePath || '') || 'edited';
+        case 'Write': return shortPath(resp.filePath || '') || 'written';
+        case 'Grep': {
+          const n = resp.numFiles ?? 0;
+          return n > 0 ? `${n} file${n>1?'s':''}` : 'no match';
+        }
+        case 'Glob': {
+          const n = Array.isArray(resp) ? resp.length : resp.numFiles ?? 0;
+          return n > 0 ? `${n} file${n>1?'s':''}` : 'no match';
+        }
+        case 'Agent': return trunc(resp.result || resp.summary || '', 30);
+        default: return '';
+      }
+    }
+    function trunc(s, m) { if (!s) return ''; s = String(s).replace(/\n/g, ' ').trim(); return s.length > m ? s.slice(0,m)+'..' : s; }
+    function esc(s) { return String(s).replace(/[:;#"<>{}()\[\]&]/g, ' ').replace(/\n/g,' ').trim() || '_'; }
+    function sid(s) { return s.replace(/[^a-zA-Z0-9]/g,'_').replace(/^_+|_+$/g,'').slice(0,20) || 'n'; }
+
+    // ===================== COLORIZE TOOLS BY CATEGORY =====================
+    const categoryMarkers = {
+      '[G]': '#a371f7',     // Git
+      '[SK]': '#ffd93d',    // Skill
+      '[W]': '#79c0ff',     // Web
+      '[M]': '#6cb4ee',     // MCP
+      '[D]': '#6e7681',     // Dir
+      '[A]': '#bc8cff',     // Agent
+      '[HK]': '#d2a8ff',    // Hook
+      '[DOC]': '#7ee787',   // Documentation (.md)
+      '✗': '#f85149',       // Failure
+      '⚠️': '#f85149',      // Error
+      '❌': '#f85149',      // Blocked
+    };
+
+    function colorizeByCategory(container) {
+      const texts = container.querySelectorAll('text');
+      let colorized = 0, scanned = 0;
+
+      texts.forEach(textEl => {
+        const raw = textEl.textContent || '';
+        if (!raw || raw.length < 2) return;
+        scanned++;
+
+        let color = null;
+
+        // Check for ASCII markers in text
+        for (const [marker, hex] of Object.entries(categoryMarkers)) {
+          if (raw.includes(marker)) {
+            color = hex;
+            break;
+          }
+        }
+
+        if (color) {
+          textEl.setAttribute('fill', color);
+          textEl.style.fill = color;
+          textEl.setAttribute('font-weight', 'bold');
+          textEl.style.fontWeight = 'bold';
+
+          const spans = textEl.querySelectorAll('tspan');
+          spans.forEach(span => {
+            span.setAttribute('fill', color);
+            span.style.fill = color;
+          });
+          colorized++;
+
+          // If this is an actor label (participant box), color the surrounding rect too
+          if (textEl.classList.contains('actor') || textEl.closest('g.actor-man')) {
+            // Find the sibling <rect> (mermaid places actor rect adjacent to actor text)
+            const parent = textEl.parentElement;
+            if (parent) {
+              const rects = parent.querySelectorAll('rect.actor, rect');
+              rects.forEach(r => {
+                // Only paint rects whose position is near the text (actor boxes)
+                r.style.stroke = color;
+                r.style.strokeWidth = '2px';
+                r.style.fill = color + '22'; // 13% alpha
+              });
+            }
+          }
+        }
+      });
+
+      console.log(`[Colorize] Scanned: ${scanned}, Colorized: ${colorized}`);
+    }
+
+    const TOOL_NAMES = ['Read','Write','Edit','Bash','Grep','Glob','Agent','WebSearch','WebFetch','Skill','TodoWrite','PROTO Read','PROTO Write','PROTO Edit','Dir','Git'];
+    const TOOL_RE = new RegExp(`^(${TOOL_NAMES.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`);
+    function boldifyToolNames(container) {
+      const texts = container.querySelectorAll('text.messageText, text.noteText');
+      texts.forEach(textEl => {
+        const spans = textEl.querySelectorAll('tspan');
+        const targets = spans.length ? spans : [textEl];
+        targets.forEach(node => {
+          const raw = node.textContent || '';
+          const m = raw.match(TOOL_RE);
+          if (m) {
+            const toolPart = m[1];
+            const rest = raw.slice(toolPart.length);
+            node.innerHTML = `<tspan font-weight="bold" fill="#e6edf3">${toolPart}</tspan>${rest}`;
+          }
+        });
+      });
+    }
+
+    // ===================== BUILD SEGMENTS =====================
+    function normalizeFile(fp) {
+      if (!fp) return '';
+      // Extract meaningful file name for artifact matching
+      const parts = fp.split('/');
+      return parts.slice(-2).join('/');
+    }
+    function artifactName(fp) {
+      if (!fp) return '?';
+      const parts = fp.split('/');
+      return parts[parts.length - 1] || '?';
+    }
+
+    function buildSegments(events, agents) {
+      const agentInfo = {};
+      let rootId = null;
+      for (const a of agents) {
+        if (!a.parentAgentId) rootId = a.id;
+        agentInfo[a.id] = { type: a.agentType, desc: a.description, parentId: a.parentAgentId };
+      }
+      if (!rootId && agents.length) rootId = agents[0].id;
+
+      const detail = showDetail.checked;
+      const merge = mergePost.checked;
+      const artifacts = showArtifacts.checked;
+
+      // Track started subagents to filter orphan stops
+      const startedAgents = new Set();
+
+      // Convert to actions, split by PreCompact
+      const allActions = [];
+      let sessionStartSeen = false;
+
+      for (const ev of events) {
+        const sub = ev.subtype;
+        if (sub === 'PostToolUse' && merge) continue;
+        if (sub === 'PostCompact' || sub === 'PermissionRequest') continue;
+        if (sub === 'SessionStart') {
+          if (sessionStartSeen) continue;
+          sessionStartSeen = true;
+        }
+        if (sub === 'SubagentStart') startedAgents.add(ev.agentId);
+        if (sub === 'SubagentStop' && !startedAgents.has(ev.agentId)) continue;
+
+        allActions.push(ev);
+      }
+
+      // Pre-pass: Map Agent PreToolUse event → spawn info, keyed by event reference
+      const spawnByEvent = new WeakMap(); // PreToolUse(Agent) ev → spawn info
+      const spawnBySubAgentId = new Map(); // subAgentId → spawn info (for SubagentStart lookup)
+      for (let i = 0; i < allActions.length; i++) {
+        const ev = allActions[i];
+        if (ev.subtype === 'PreToolUse' && ev.toolName === 'Agent') {
+          const input = ev.payload?.tool_input || {};
+          for (let j = i + 1; j < allActions.length && j < i + 10; j++) {
+            if (allActions[j].subtype === 'SubagentStart') {
+              const info = {
+                subAgentId: allActions[j].agentId,
+                subagentType: input.subagent_type || 'agent',
+                description: input.description || '',
+                prompt: input.prompt || '',
+                _parentP: null, // filled during action building
+              };
+              spawnByEvent.set(ev, info);
+              spawnBySubAgentId.set(allActions[j].agentId, info);
+              break;
+            }
+          }
+        }
+      }
+
+      // Split by PreCompact
+      const segments = [];
+      let current = [];
+      for (const ev of allActions) {
+        if (ev.subtype === 'PreCompact') {
+          if (current.length) segments.push(current);
+          current = [];
+        } else {
+          current.push(ev);
+        }
+      }
+      if (current.length) segments.push(current);
+
+      // Track artifact writes across segments (persistent)
+      const artifactWriters = new Map(); // normalizedFile → { agentId, participant, file }
+
+      // Build mermaid for each segment
+      return segments.map((segEvents, idx) => {
+        const R = 'Claude';
+        const lines = ['sequenceDiagram'];
+        lines.push(`  participant User`);
+        lines.push(`  participant ${R}`);
+
+        const declared = new Set(['User', R]);
+        const a2p = { [rootId]: R };
+
+        function getP(agentId) {
+          if (a2p[agentId]) return a2p[agentId];
+          const info = agentInfo[agentId];
+          if (!info) {
+            const fb = 'X' + sid(agentId);
+            if (!declared.has(fb)) { declared.add(fb); lines.push(`  participant ${fb} as ${agentId.slice(0,8)}`); }
+            a2p[agentId] = fb; return fb;
+          }
+          let label = '[A] ' + (info.type || 'Sub');
+          if (info.desc) label += ' ' + trunc(info.desc, 16);
+          const s = sid(info.type || agentId) + sid(agentId.slice(0,6));
+          // Use quoted form so [brackets] survive (mermaid would otherwise need escaping)
+          // Also strip characters that would break even quoted form.
+          const safeLabel = label.replace(/["\n\r]/g, ' ').trim();
+          if (!declared.has(s)) { declared.add(s); lines.push(`  participant ${s} as "${safeLabel}"`); }
+          a2p[agentId] = s; return s;
+        }
+
+        // Pre-declare subagent participants
+        for (const ev of segEvents) {
+          if (ev.subtype === 'SubagentStart') getP(ev.agentId);
+        }
+
+        // Build grouped actions
+        const actions = [];
+        const emittedArtifacts = new Set(); // avoid duplicate artifact notes
+
+        for (let si = 0; si < segEvents.length; si++) {
+          const ev = segEvents[si];
+          const sub = ev.subtype;
+          const p = getP(ev.agentId);
+
+          if (sub === 'SessionStart') {
+            actions.push({ kind: 'note', over: `User,${R}`, text: 'Session Start' });
+          } else if (sub === 'UserPromptSubmit') {
+            const prompt = (ev.payload?.prompt || '').trim();
+            const isSkill = prompt.startsWith('/');
+            const skillName = isSkill ? prompt.split(/\s+/)[0] : '';
+            const hookCtx = ev.payload?.additionalContext || ev.payload?.hook_output || '';
+            const hookText = typeof hookCtx === 'string' ? hookCtx : JSON.stringify(hookCtx);
+            const hasHook = hookText.trim().length > 0;
+            const body = detail ? trunc(prompt, 60) : (isSkill ? skillName : 'prompt');
+            const text = isSkill ? `[SK] ${body}` : hasHook ? `[HK] ${body}` : body;
+            actions.push({ kind: 'msg', from: 'User', to: R, text, arrow: '->>' });
+            if (hasHook && detail) {
+              actions.push({ kind: 'note', over: `User,${R}`, text: `Hook: ${trunc(hookText.replace(/\s+/g,' '), 80)}` });
+            }
+          } else if (sub === 'PreToolUse') {
+            const tool = ev.toolName || '?';
+            const input = ev.payload?.tool_input;
+
+            if (tool === 'Agent') {
+              // Check if we have a spawn mapping — skip self-arrow, SubagentStart will handle it
+              const spawn = spawnByEvent.get(ev);
+              if (spawn) {
+                spawn._parentP = p;
+              } else {
+                // No matching SubagentStart found — fallback to self-arrow
+                const st = input?.subagent_type || 'agent';
+                actions.push({ kind: 'msg', from: p, to: p, text: `[A] Agent ${st}  ${trunc(input?.description||'', 22)}`, arrow: '->>' });
+              }
+            } else {
+              const filePath = input?.file_path || '';
+              const proto = (tool === 'Read' || tool === 'Write' || tool === 'Edit') && isProtocolFile(filePath);
+              const category = getToolCategory(tool, input);
+              const prefix = proto ? 'PROTO ' : '';
+              const finalTool = category === 'git' ? 'git' : tool;
+              // Group key: for Read/Write/Edit, group by file to show duplicates as "x N"
+              // DOC and PROTO files: always group per-file so each document is individually visible
+              const gk = proto ? `${p}::PROTO::${tool}::${filePath}`
+                : category === 'doc' ? `${p}::DOC::${tool}::${filePath}`
+                : category === 'fileops' ? `${p}::${category}::${filePath}`
+                : `${p}::${category}`;
+              actions.push({ kind: 'tool', p, tool: prefix + finalTool, desc: descTool(tool, input), groupKey: gk, isProto: proto, category: category });
+
+              // Artifact tracking
+              if (artifacts && filePath) {
+                const nf = normalizeFile(filePath);
+                if (tool === 'Write' || tool === 'Edit') {
+                  artifactWriters.set(nf, { agentId: ev.agentId, participant: p, file: filePath });
+                } else if (tool === 'Read') {
+                  const writer = artifactWriters.get(nf);
+                  if (writer && writer.agentId !== ev.agentId) {
+                    const artKey = `${writer.participant}->${p}::${nf}`;
+                    if (!emittedArtifacts.has(artKey)) {
+                      emittedArtifacts.add(artKey);
+                      const name = artifactName(filePath);
+                      actions.push({ kind: 'artifact', from: writer.participant, to: p, text: name });
+                    }
+                  }
+                }
+              }
+            }
+          } else if (sub === 'PostToolUse') {
+            const resp = ev.payload?.tool_response;
+            const summary = summarizeResponse(ev.toolName, resp);
+            const text = summary ? `${ev.toolName||'?'}: ${summary}` : `${ev.toolName||'?'} done`;
+            const full = typeof resp === 'string' ? resp : JSON.stringify(resp || '', null, 2);
+            actions.push({ kind: 'note-right', p, text, fullText: `${ev.toolName||'?'} ✓\n──────\n${(full||'').slice(0, 800)}` });
+          } else if (/Failure$/i.test(sub)) {
+            const err = ev.payload?.error || ev.payload?.error_message || ev.payload?.tool_response || '';
+            const errStr = typeof err === 'string' ? err : JSON.stringify(err);
+            const text = `✗ ${ev.toolName||'?'}: ${trunc(errStr.replace(/\s+/g,' '), 40)}`;
+            actions.push({ kind: 'note-right', p, text, fullText: `${ev.toolName||'?'} FAILED\n──────\n${errStr.slice(0, 800)}`, isError: true });
+          } else if (sub === 'SubagentStart') {
+            const info = agentInfo[ev.agentId];
+            // Check if this SubagentStart is linked to an Agent PreToolUse
+            const spawn = spawnBySubAgentId.get(ev.agentId);
+            if (spawn) {
+              const parentP = spawn._parentP || R;
+              const label = `[A] ${spawn.subagentType} ${trunc(spawn.description, 22)}`;
+              actions.push({ kind: 'msg', from: parentP, to: p, text: label, arrow: '->>' });
+              // Always show input prompt summary for subagent visibility
+              if (spawn.prompt) {
+                const promptStr = (typeof spawn.prompt === 'string' ? spawn.prompt : JSON.stringify(spawn.prompt)).replace(/\s+/g, ' ');
+                actions.push({ kind: 'note-right', p, text: `input: ${trunc(promptStr, detail ? 80 : 50)}` });
+              }
+            } else {
+              actions.push({ kind: 'msg', from: R, to: p, text: `[A] ${info?.type||'Sub'} ${trunc(info?.desc||'', 20)}`, arrow: '->>' });
+            }
+          } else if (sub === 'SubagentStop') {
+            const info = agentInfo[ev.agentId];
+            const result = ev.payload?.result || ev.payload?.output || ev.payload?.response || '';
+            const resultText = typeof result === 'string' ? result : JSON.stringify(result);
+            const summary = resultText ? trunc(resultText.replace(/\s+/g, ' '), 55) : 'complete';
+            actions.push({ kind: 'msg', from: p, to: R, text: `[A] ${info?.type||'sub'}: ${summary}`, arrow: '-->>' });
+            // Add output note on the parent side for visibility
+            if (resultText && resultText.length > 55) {
+              actions.push({ kind: 'note-right', p: R, text: `output: ${trunc(resultText.replace(/\s+/g, ' '), 80)}` });
+            }
+          } else if (sub === 'ToolBlocked') {
+            const tool = ev.toolName || '?';
+            const reason = ev.payload?.blocked_reason || 'Permission denied';
+            actions.push({ kind: 'note-right', p, text: `❌ ${tool} blocked: ${reason}`, isBlocked: true });
+          } else if (sub === 'Error') {
+            const errorMsg = ev.payload?.error_message || ev.payload?.message || 'Unknown error';
+            const toolName = ev.toolName || '?';
+            actions.push({ kind: 'note-right', p, text: `⚠️ ${toolName}: ${trunc(errorMsg, 40)}`, isError: true });
+          } else if (sub === 'CwdChg') {
+            const newCwd = ev.payload?.cwd || '?';
+            actions.push({ kind: 'tool', p, tool: 'Dir', desc: shortPath(newCwd), groupKey: `${p}::dir`, category: 'dir' });
+          } else if (sub === 'Stop') {
+            actions.push({ kind: 'msg', from: R, to: 'User', text: 'response', arrow: '-->>' });
+          } else if (sub === 'SessionEnd') {
+            actions.push({ kind: 'note', over: `User,${R}`, text: 'Session End' });
+          }
+        }
+
+        // Group consecutive identical tools — accumulate desc list for tooltip
+        const grouped = [];
+        for (const a of actions) {
+          if (a.kind === 'tool' && a.groupKey) {
+            const prev = grouped[grouped.length - 1];
+            if (prev?.kind === 'tool' && prev.groupKey === a.groupKey) {
+              prev.count++;
+              if (a.desc) prev.descList.push(a.desc);
+              continue;
+            }
+            grouped.push({ ...a, count: 1, descList: a.desc ? [a.desc] : [] });
+          } else {
+            grouped.push(a);
+          }
+        }
+
+        // Emit — also collect label→tip pairs for robust post-render matching
+        const tipPairs = []; // [{label, tip}] in emission order
+        for (const a of grouped) {
+          let line = '';
+          let tip = '';
+          let label = '';  // the visible text mermaid will render
+          if (a.kind === 'note') {
+            label = esc(a.text);
+            line = `  Note over ${a.over}: ${label}`;
+            tip = a.text;
+          } else if (a.kind === 'note-right') {
+            label = esc(a.text);
+            line = `  Note right of ${a.p}: ${label}`;
+            tip = a.fullText || a.text;
+          } else if (a.kind === 'msg') {
+            label = esc(a.text);
+            line = `  ${a.from}${a.arrow}${a.to}: ${label}`;
+            tip = a.fullText || a.text;
+          } else if (a.kind === 'artifact') {
+            label = esc(a.text);
+            line = `  Note over ${a.from},${a.to}: ${label}`;
+            tip = a.fullText || a.text;
+          } else if (a.kind === 'tool') {
+            const cx = a.count > 1 ? ` x${a.count}` : '';
+            // DOC and PROTO always show file name regardless of detail mode (harness visibility)
+            const alwaysShowDesc = a.isProto || a.category === 'doc';
+            const descText = alwaysShowDesc ? shortPath(a.desc) : a.desc;
+            const dx = a.desc && (detail || alwaysShowDesc) ? ' ' + esc(descText) : '';
+            const arrow = a.isProto ? '-->>' : '->>';
+            const markers = { git: '[G]', skill: '[SK]', web: '[W]', mcp: '[M]', dir: '[D]', agent: '[A]', doc: '[DOC]' };
+            const marker = markers[a.category] || '';
+            label = `${marker} ${esc(a.tool)}${cx}${dx}`.trim();
+            line = `  ${a.p}${arrow}${a.p}: ${label}`;
+            const header = `${marker} ${a.tool}${cx}`.trim();
+            const body = a.descList && a.descList.length
+              ? a.descList.map((d, i) => a.descList.length > 1 ? `${i + 1}. ${d}` : d).join('\n')
+              : (a.desc || '(no details)');
+            tip = `${header}\n──────\n${body}`;
+          }
+          if (line) { lines.push(line); tipPairs.push({ label, tip }); }
+        }
+
+        return { mermaid: lines.join('\n'), label: idx === 0 ? 'Start' : `After Compact #${idx}`, eventCount: segEvents.length, tipPairs };
+      });
+    }
+
+    // ===================== TOOLTIP INJECTION =====================
+    // Builds an index of file paths / tool calls / prompts seen in events,
+    // then attaches a <title> child to each SVG <text> whose textContent
+    // partially matches an indexed key — exposing full payload on hover.
+    let currentEvents = [];
+    let currentAgents = [];
+
+    function buildEventLookup(events) {
+      // Multiple keys → array of detail strings
+      const lookup = new Map();
+      const add = (key, val) => {
+        if (!key || !val) return;
+        const k = String(key).trim();
+        if (!k) return;
+        const arr = lookup.get(k) || [];
+        if (!arr.includes(val)) arr.push(val);
+        lookup.set(k, arr);
+      };
+      for (const ev of events) {
+        const sub = ev.subtype;
+        const input = ev.payload?.tool_input || {};
+        const tool = ev.toolName || '';
+        if (sub === 'PreToolUse') {
+          if (input.file_path) {
+            const fp = input.file_path;
+            add(fp, `${tool} ${fp}`);
+            const last = fp.split('/').slice(-2).join('/');
+            add(last, `${tool} ${fp}`);
+          }
+          if (input.command) add(input.command.slice(0, 30), `Bash: ${input.command}`);
+          if (input.pattern) add(input.pattern, `${tool}: /${input.pattern}/`);
+          if (input.skill) {
+            const skillFull = input.skill + (input.args ? ' ' + input.args : '');
+            add(input.skill, `Skill: ${skillFull}`);
+          }
+          if (input.url) add(input.url, `${tool}: ${input.url}`);
+          if (input.query) add(input.query, `${tool}: ${input.query}`);
+          if (input.subagent_type) {
+            const desc = input.description || '';
+            const promptStr = (typeof input.prompt === 'string' ? input.prompt : '').slice(0, 300);
+            add(input.subagent_type, `Agent ${input.subagent_type}\ndesc: ${desc}\nprompt: ${promptStr}`);
+            if (desc) add(desc, `Agent ${input.subagent_type}\ndesc: ${desc}\nprompt: ${promptStr}`);
+          }
+        } else if (sub === 'UserPromptSubmit') {
+          const p = (ev.payload?.prompt || '').trim();
+          if (p) {
+            add('prompt', p);
+            if (p.startsWith('/')) {
+              const slashName = p.split(/\s+/)[0];
+              add(slashName, `Slash command: ${p}`);
+            }
+          }
+        } else if (sub === 'SubagentStart' || sub === 'SubagentStop') {
+          const result = ev.payload?.result || ev.payload?.output || ev.payload?.response || '';
+          const rs = typeof result === 'string' ? result : JSON.stringify(result);
+          if (rs) add('output', rs.slice(0, 500));
+        }
+      }
+      return lookup;
+    }
+
+    // Custom floating tooltip (native SVG <title> is unreliable after Mermaid post-processing)
+    let _floatTip = null;
+    function getFloatTip() {
+      if (_floatTip) return _floatTip;
+      _floatTip = document.createElement('div');
+      _floatTip.id = 'float-tip';
+      Object.assign(_floatTip.style, {
+        position: 'fixed', zIndex: '9999', pointerEvents: 'none',
+        background: '#0d1117', color: '#e6edf3', border: '1px solid #30363d',
+        borderRadius: '6px', padding: '8px 10px', fontSize: '11px',
+        fontFamily: 'ui-monospace,SFMono-Regular,monospace', maxWidth: '560px',
+        whiteSpace: 'pre-wrap', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        display: 'none', lineHeight: '1.45',
+      });
+      document.body.appendChild(_floatTip);
+      return _floatTip;
+    }
+    function addTooltips(container, tipPairs) {
+      const tip = getFloatTip();
+      const show = (e, text) => {
+        tip.textContent = text;
+        tip.style.display = 'block';
+        const pad = 12;
+        let x = e.clientX + pad, y = e.clientY + pad;
+        const w = tip.offsetWidth, h = tip.offsetHeight;
+        if (x + w > window.innerWidth) x = e.clientX - w - pad;
+        if (y + h > window.innerHeight) y = e.clientY - h - pad;
+        tip.style.left = x + 'px';
+        tip.style.top = y + 'px';
+      };
+      const hide = () => { tip.style.display = 'none'; };
+      const attach = (el, text) => {
+        if (!text) return;
+        el.style.cursor = 'help';
+        el.addEventListener('mouseenter', (e) => show(e, text));
+        el.addEventListener('mousemove', (e) => show(e, text));
+        el.addEventListener('mouseleave', hide);
+      };
+
+      // Label-based lookup with FIFO queue per label (handles duplicates in order).
+      const queue = new Map();
+      const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+      (tipPairs || []).forEach(({ label, tip }) => {
+        const k = norm(label);
+        if (!k) return;
+        if (!queue.has(k)) queue.set(k, []);
+        queue.get(k).push(tip);
+      });
+
+      // Walk DOM in document order, match by normalized textContent
+      const nodes = container.querySelectorAll('text.messageText, text.noteText');
+      const seen = new Set();
+      nodes.forEach(el => {
+        if (seen.has(el)) return;
+        seen.add(el);
+        const raw = norm(el.textContent);
+        if (!raw) return;
+        // Exact-match only. Partial matching caused wrong tip attachments
+        // (e.g. "Bash" matching "Bash x3"). If no exact match, show raw text.
+        let matchedTip = null;
+        const q = queue.get(raw);
+        if (q && q.length) matchedTip = q.shift();
+        attach(el, matchedTip || raw);
+      });
+    }
+
+    // ===================== TIMELINE TABLE VIEW =====================
+    function categoryBadge(cat) {
+      const map = { git: ['G','#a371f7'], skill: ['SK','#ffd93d'], web: ['W','#79c0ff'], mcp: ['M','#6cb4ee'], dir: ['D','#6e7681'], agent: ['A','#bc8cff'], doc: ['DOC','#7ee787'], fileops: ['FILE','#58a6ff'], search: ['SRCH','#7ee787'], bash: ['BASH','#f78166'], prompt: ['PROMPT','#ffa657'], hook: ['HOOK','#d2a8ff'], error: ['FAIL','#f85149'], other: ['?','#8b949e'] };
+      const [t, c] = map[cat] || map.other;
+      return `<span class="badge" style="background:${c}22;color:${c};border:1px solid ${c}55">${t}</span>`;
+    }
+
+    // HTML escape for table cells — unlike esc() this preserves (), :, [] and
+    // does NOT return '_' for empty strings (which polluted the Tool column).
+    function he(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function renderTable(events, agents) {
+      const tbody = document.getElementById('table-body');
+      const countEl = document.getElementById('table-count');
+      tbody.innerHTML = '';
+      if (!events.length) {
+        countEl.textContent = '0 events';
+        return;
+      }
+      const agentMap = {};
+      for (const a of agents) agentMap[a.id] = a;
+      const t0 = new Date(events[0].timestamp || events[0].createdAt || Date.now()).getTime();
+
+      const rows = [];
+      events.forEach((ev, idx) => {
+        const ts = new Date(ev.timestamp || ev.createdAt || Date.now()).getTime();
+        const dt = isNaN(ts - t0) ? '' : `+${(ts - t0)}ms`;
+        const sub = ev.subtype || '?';
+        const tool = ev.toolName || '';
+        const input = ev.payload?.tool_input || {};
+        const ag = agentMap[ev.agentId];
+        const shortId = (ev.agentId || '').slice(0, 8);
+        let agLabel;
+        if (!ag) {
+          agLabel = shortId || '—';
+        } else {
+          const typeLabel = ag.agentType || ag.name || (ag.parentAgentId ? 'subagent' : 'main');
+          agLabel = `${typeLabel} · ${shortId}`;
+        }
+
+        // Compose detail
+        let detail = '';
+        let category = 'other';
+        if (sub === 'PreToolUse') {
+          category = getToolCategory(tool, input);
+          if (input.file_path) detail = input.file_path;
+          else if (input.command) detail = input.command;
+          else if (input.skill) detail = input.skill + (input.args ? ' ' + input.args : '');
+          else if (input.subagent_type) detail = `${input.subagent_type}: ${input.description || ''}`;
+          else if (input.pattern) detail = `/${input.pattern}/`;
+          else if (input.url) detail = input.url;
+          else if (input.query) detail = input.query;
+          else detail = JSON.stringify(input).slice(0, 120);
+        } else if (sub === 'UserPromptSubmit') {
+          detail = (ev.payload?.prompt || '').replace(/\s+/g, ' ');
+          if (detail.startsWith('/')) category = 'skill';
+          // Detect hook output injected by user-configured hooks
+          const hookCtx = ev.payload?.additionalContext || ev.payload?.hook_output || '';
+          const hookText = typeof hookCtx === 'string' ? hookCtx : JSON.stringify(hookCtx);
+          if (hookText.trim()) {
+            category = 'hook';
+            detail = `[Hook] ${hookText.replace(/\s+/g, ' ').slice(0, 200)} ── ${detail}`;
+          }
+        } else if (sub === 'PostToolUse') {
+          const resp = ev.payload?.tool_response;
+          detail = typeof resp === 'string' ? resp : JSON.stringify(resp || '').slice(0, 200);
+        } else if (sub === 'SubagentStart' || sub === 'SubagentStop') {
+          category = 'agent';
+          const r = ev.payload?.result || ev.payload?.output || ev.payload?.prompt || '';
+          detail = (typeof r === 'string' ? r : JSON.stringify(r)).replace(/\s+/g, ' ');
+        } else if (sub === 'Error' || sub === 'ToolBlocked') {
+          detail = ev.payload?.error_message || ev.payload?.blocked_reason || JSON.stringify(ev.payload || '');
+        } else {
+          detail = JSON.stringify(ev.payload || '').slice(0, 120);
+        }
+
+        const isSub = ag && ag.parentAgentId;
+        const isPost = sub === 'PostToolUse';
+        const isFailure = /Failure$/i.test(sub) || sub === 'PostToolUseFailure';
+        const isErr = sub === 'Error' || sub === 'ToolBlocked' || isFailure;
+        // Friendly tool label when toolName is missing (dialogue / session events)
+        const friendlyTool = {
+          UserPromptSubmit: '(user→claude)',
+          Stop: '(claude→user)',
+          SubagentStart: '(spawn)',
+          SubagentStop: '(return)',
+          SessionStart: '(session start)',
+          SessionEnd: '(session end)',
+          CwdChg: '(cwd change)',
+          TaskCreated: '(task created)',
+          PreCompact: '(pre compact)',
+          PostCompact: '(post compact)',
+          Notification: '(notification)',
+          PromptTooLong: '(prompt too long)',
+        };
+        const toolDisplay = tool || friendlyTool[sub] || `(${sub||'event'})`;
+        // Re-categorize dialogue events so badge is meaningful
+        if (!tool) {
+          if (sub === 'UserPromptSubmit' && category !== 'hook') category = detail.startsWith('/') ? 'skill' : 'prompt';
+          else if (sub === 'Stop') category = 'prompt';
+          else if (sub === 'SubagentStart' || sub === 'SubagentStop') category = 'agent';
+        }
+        if (isFailure) category = 'error';
+        const cls = ['row-event', `cat-${category}`];
+        if (isSub) cls.push('sub');
+        if (isPost) cls.push('evt-post');
+        if (isErr) cls.push('evt-error');
+        rows.push({
+          idx,
+          html: `<tr class="${cls.join(' ')}" data-idx="${idx}">
+            <td class="col-time">${he(dt)}</td>
+            <td class="col-agent" title="${he(ev.agentId || '')}">${he(agLabel)}</td>
+            <td class="col-type">${he(sub)}</td>
+            <td class="col-tool">${categoryBadge(category)}${he(toolDisplay)}</td>
+            <td class="col-detail" title="${he(detail)}">${he(detail.slice(0, 300))}</td>
+          </tr>
+          <tr class="row-detail" data-idx="${idx}"><td colspan="5"><pre>${he(JSON.stringify(ev, null, 2))}</pre></td></tr>`,
+          searchKey: (sub + ' ' + tool + ' ' + agLabel + ' ' + detail).toLowerCase(),
+        });
+      });
+
+      tbody.innerHTML = rows.map(r => r.html).join('');
+      countEl.textContent = `${events.length} events`;
+
+      // Click to expand
+      tbody.querySelectorAll('tr.row-event').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const idx = tr.getAttribute('data-idx');
+          const detail = tbody.querySelector(`tr.row-detail[data-idx="${idx}"]`);
+          if (detail) {
+            const open = detail.classList.toggle('show');
+            tr.classList.toggle('expanded', open);
+          }
+        });
+      });
+
+      // Filter
+      const filterInput = document.getElementById('table-filter');
+      filterInput.oninput = () => {
+        const q = filterInput.value.toLowerCase().trim();
+        let visible = 0;
+        tbody.querySelectorAll('tr.row-event').forEach((tr, i) => {
+          const match = !q || rows[i].searchKey.includes(q);
+          tr.style.display = match ? '' : 'none';
+          const detail = tbody.querySelector(`tr.row-detail[data-idx="${rows[i].idx}"]`);
+          if (detail && !match) { detail.classList.remove('show'); tr.classList.remove('expanded'); }
+          if (detail && !match) detail.style.display = 'none';
+          else if (detail) detail.style.removeProperty('display');
+          if (match) visible++;
+        });
+        countEl.textContent = `${visible} / ${events.length} events`;
+      };
+    }
+
+    // ===================== TAB SWITCHING =====================
+    document.querySelectorAll('.tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tabBtn.classList.add('active');
+        const view = tabBtn.getAttribute('data-view');
+        const viewport = document.getElementById('viewport');
+        const tableView = document.getElementById('table-view');
+        if (view === 'table') {
+          viewport.style.display = 'none';
+          tableView.style.display = 'flex';
+          tableView.style.flexDirection = 'column';
+          if (currentEvents.length) renderTable(currentEvents, currentAgents);
+        } else {
+          viewport.style.display = '';
+          tableView.style.display = 'none';
+        }
+      });
+    });
+
+    // ===================== RENDER =====================
+    let renderCount = 0;
+    async function renderDiagram(sessionId) {
+      if (!sessionId) {
+        wrap.innerHTML = '<div class="empty" style="width:100vw;height:80vh">Select a session</div>';
+        return;
+      }
+
+      statusText.textContent = 'Loading...';
+      try {
+        const [events, agents] = await Promise.all([
+          api(`/sessions/${encodeURIComponent(sessionId)}/events`),
+          api(`/sessions/${encodeURIComponent(sessionId)}/agents`)
+        ]);
+
+        if (!events.length) {
+          wrap.innerHTML = '<div class="empty" style="width:100vw;height:80vh">No events</div>';
+          statusText.textContent = '0 events'; return;
+        }
+
+        currentEvents = events;
+        currentAgents = agents;
+        const eventLookup = buildEventLookup(events);
+        // Update table view if currently visible
+        if (document.getElementById('table-view').style.display === 'flex') {
+          renderTable(events, agents);
+        }
+        const segments = buildSegments(events, agents);
+        currentMermaid = segments.map(s => s.mermaid).join('\n\n---\n\n');
+
+        statusText.textContent = `${events.length} events, ${agents.length} agents, ${segments.length} segments — rendering...`;
+
+        wrap.innerHTML = '';
+        wrap.style.display = 'flex';
+
+        for (let i = 0; i < segments.length; i++) {
+          // Add divider between segments
+          if (i > 0) {
+            const divider = document.createElement('div');
+            divider.className = 'segment-divider';
+            wrap.appendChild(divider);
+          }
+
+          const seg = document.createElement('div');
+          seg.className = 'segment';
+
+          const label = document.createElement('div');
+          label.className = 'segment-label';
+          label.textContent = segments[i].label + ` (${segments[i].eventCount} ev)`;
+          seg.appendChild(label);
+
+          renderCount++;
+          try {
+            const { svg } = await mermaid.render('s' + renderCount, segments[i].mermaid);
+            const svgContainer = document.createElement('div');
+            svgContainer.innerHTML = svg;
+            svgContainer.style.paddingTop = '24px';
+            // Apply colorization, bold names, and tooltips
+            setTimeout(((segPairs) => () => {
+              colorizeByCategory(svgContainer);
+              boldifyToolNames(svgContainer);
+              addTooltips(svgContainer, segPairs);
+            })(segments[i].tipPairs || []), 100);
+            seg.appendChild(svgContainer);
+          } catch (e) {
+            const err = document.createElement('pre');
+            err.style.cssText = 'font-size:10px;color:#f78166;padding:12px;max-width:400px;overflow:auto';
+            err.textContent = `Segment ${i} error: ${e.message}\n\n${segments[i].mermaid}`;
+            seg.appendChild(err);
+          }
+
+          wrap.appendChild(seg);
+        }
+
+        statusText.textContent = `${events.length} events, ${agents.length} agents, ${segments.length} segment${segments.length > 1 ? 's' : ''}`;
+        requestAnimationFrame(() => fitToWindow());
+      } catch (e) {
+        console.error(e);
+        wrap.innerHTML = `<div class="empty" style="width:100vw;height:80vh;flex-direction:column;gap:12px">
+          <div>Error: ${e.message}</div>
+          <pre style="font-size:10px;max-width:900px;max-height:60vh;overflow:auto;color:#8b949e;padding:12px">${currentMermaid}</pre>
+        </div>`;
+        statusText.textContent = 'Error';
+      }
+    }
+
+    // ===================== EVENTS =====================
+    sessionSelect.addEventListener('change', () => renderDiagram(sessionSelect.value));
+    document.getElementById('btn-refresh').addEventListener('click', () => { loadSessions(); if (sessionSelect.value) renderDiagram(sessionSelect.value); });
+    showDetail.addEventListener('change', () => { if (sessionSelect.value) renderDiagram(sessionSelect.value); });
+    mergePost.addEventListener('change', () => { if (sessionSelect.value) renderDiagram(sessionSelect.value); });
+    showArtifacts.addEventListener('change', () => { if (sessionSelect.value) renderDiagram(sessionSelect.value); });
+    document.getElementById('btn-copy').addEventListener('click', () => {
+      if (currentMermaid) { navigator.clipboard.writeText(currentMermaid); statusText.textContent = 'Copied!'; setTimeout(() => statusText.textContent = '', 2000); }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '0' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); resetZoom(); }
+      if (e.key === '=' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); document.getElementById('btn-zin').click(); }
+      if (e.key === '-' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); document.getElementById('btn-zout').click(); }
+      if (e.key === '1' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); fitToWindow(); }
+    });
+    loadSessions();
+  </script>
+</body>
+</html>

@@ -5,6 +5,7 @@ import type { ParsedEvent } from '../types'
 import { parseRawEvent } from '../parser'
 import { resolveProject } from '../services/project-resolver'
 import { config } from '../config'
+import { readFile } from 'node:fs/promises'
 
 type Env = {
   Variables: {
@@ -224,6 +225,49 @@ router.post('/events', async (c) => {
           type: 'session_update',
           data: { id: parsed.sessionId, status: 'active' },
         })
+      }
+    }
+
+    // For SubagentStop: read the subagent transcript to extract the user's input prompt
+    if (parsed.subtype === 'SubagentStop') {
+      const transcriptPath = (hookPayload as any)?.agent_transcript_path as string | undefined
+      if (transcriptPath) {
+        try {
+          const content = await readFile(transcriptPath, 'utf-8')
+          const lines = content.trim().split('\n')
+          for (const line of lines) {
+            try {
+              const entry = JSON.parse(line)
+              if (entry.role === 'user' || entry.type === 'human' || (entry.type === 'user' && entry.message)) {
+                let rawContent: any
+                if (entry.type === 'user' && entry.message) {
+                  rawContent = typeof entry.message === 'string' ? entry.message : (entry.message.content || '')
+                } else {
+                  rawContent = entry.content
+                }
+                const text = typeof rawContent === 'string'
+                  ? rawContent
+                  : Array.isArray(rawContent)
+                    ? rawContent.filter((c: any) => typeof c === 'object' && c.type === 'text').map((c: any) => c.text || '').join('\n')
+                    : JSON.stringify(rawContent)
+                // Extract after </system-reminder> tags
+                const parts = text.split('</system-reminder>')
+                const question = parts.length > 1 ? parts[parts.length - 1].trim() : text.trim()
+                // Skip system content, compaction artifacts, and overly long agent prompts
+                if (question
+                    && !question.startsWith('<')
+                    && !question.startsWith('This session is being continued')
+                    && !question.startsWith('Summary:')
+                    && !question.startsWith('Continue the conversation')
+                    && question.length < 2000
+                    && question.length > 0) {
+                  ;(parsed.raw as any)._btw_input = question
+                  break
+                }
+              }
+            } catch { /* skip malformed lines */ }
+          }
+        } catch { /* transcript file may not exist */ }
       }
     }
 
