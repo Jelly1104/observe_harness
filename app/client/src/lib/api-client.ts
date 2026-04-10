@@ -86,6 +86,8 @@ export const api = {
     fetchJson<OtelSummary>(`/sessions/${encodeURIComponent(sessionId)}/otel-summary`),
   getOtelAnalytics: (sessionId: string) =>
     fetchJson<OtelAnalytics>(`/sessions/${encodeURIComponent(sessionId)}/otel-analytics`),
+  getOtelVulnerabilities: (sessionId: string) =>
+    fetchJson<OtelVulnerabilities>(`/sessions/${encodeURIComponent(sessionId)}/otel-vulnerabilities`),
   getOtelEvents: (sessionId: string, filters?: { eventName?: string; promptId?: string; limit?: number }) => {
     const params = new URLSearchParams()
     if (filters?.eventName) params.set('event_name', filters.eventName)
@@ -121,6 +123,19 @@ export interface OtelAnalytics {
     totalCost: number; finalSuccess: boolean; timestamps: number[]
   }>
   modelCosts: Record<string, { cost: number; turns: number; tokens: number }>
+}
+
+export interface OtelVulnerabilities {
+  summary: { critical: number; warning: number; info: number }
+  patterns: Array<{
+    id: string
+    severity: 'critical' | 'warning' | 'info'
+    pattern: string
+    description: string
+    promptId: string | null
+    timestamp: number
+    details: Record<string, unknown>
+  }>
 }
 
 export interface OtelEvent {

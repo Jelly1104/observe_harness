@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 import { useUIStore } from '@/stores/ui-store'
-import { useOtelSummary, useOtelEvents, useOtelAnalytics } from '@/hooks/use-otel'
+import { useOtelSummary, useOtelEvents, useOtelAnalytics, useOtelVulnerabilities } from '@/hooks/use-otel'
 import { Sparkline, MiniBar, RingGauge } from './sparkline'
 import { cn } from '@/lib/utils'
 import {
   DollarSign, Zap, Clock, Database, TrendingUp, AlertCircle,
-  AlertTriangle, RotateCcw, Activity,
+  AlertTriangle, RotateCcw, Activity, Shield, ShieldAlert, ShieldCheck, Repeat, Ban, TrendingDown,
 } from 'lucide-react'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -455,6 +455,105 @@ function RetryList({ retries }: {
   )
 }
 
+// ── Vulnerability panel ──────────────────────────────────────────────────────
+
+const PATTERN_ICONS: Record<string, typeof Shield> = {
+  permission_reject: Ban,
+  cost_spike: TrendingUp,
+  loop_detected: Repeat,
+  hook_evasion: ShieldAlert,
+  token_surge: TrendingDown,
+}
+
+const SEVERITY_STYLES: Record<string, { border: string; bg: string; text: string; badge: string }> = {
+  critical: { border: 'border-red-500/30', bg: 'bg-red-500/5', text: 'text-red-400', badge: 'bg-red-500/15 text-red-400' },
+  warning: { border: 'border-amber-500/30', bg: 'bg-amber-500/5', text: 'text-amber-400', badge: 'bg-amber-500/15 text-amber-400' },
+  info: { border: 'border-blue-500/30', bg: 'bg-blue-500/5', text: 'text-blue-400', badge: 'bg-blue-500/15 text-blue-400' },
+}
+
+function VulnerabilityPanel({ data }: {
+  data: { summary: { critical: number; warning: number; info: number }; patterns: Array<{
+    id: string; severity: string; pattern: string; description: string
+    promptId: string | null; timestamp: number; details: Record<string, unknown>
+  }> }
+}) {
+  const total = data.summary.critical + data.summary.warning + data.summary.info
+  if (total === 0) {
+    return (
+      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center justify-center h-8 w-8 rounded-lg shrink-0 bg-emerald-500/15">
+            <ShieldCheck className="h-4 w-4 text-emerald-400" />
+          </span>
+          <div>
+            <div className="text-xs font-semibold text-emerald-400">취약점 패턴 없음</div>
+            <div className="text-[10px] text-muted-foreground/60 mt-0.5">
+              이상 패턴이 감지되지 않았습니다
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+      {/* Header with severity counts */}
+      <div className="px-4 py-2.5 border-b border-border/40 flex items-center gap-2">
+        <Shield className="h-3.5 w-3.5 text-muted-foreground/60" />
+        <span className="text-xs font-semibold">패턴 감지</span>
+        <div className="flex items-center gap-1.5 ml-auto">
+          {data.summary.critical > 0 && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/15 text-red-400">
+              {data.summary.critical} critical
+            </span>
+          )}
+          {data.summary.warning > 0 && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-400">
+              {data.summary.warning} warning
+            </span>
+          )}
+          {data.summary.info > 0 && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-400">
+              {data.summary.info} info
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Pattern list */}
+      <div className="divide-y divide-border/20">
+        {data.patterns.map((p) => {
+          const style = SEVERITY_STYLES[p.severity] || SEVERITY_STYLES.info
+          const Icon = PATTERN_ICONS[p.pattern] || AlertTriangle
+          const time = new Date(p.timestamp).toLocaleTimeString('en-US', {
+            hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit',
+          })
+
+          return (
+            <div key={p.id} className={cn('px-4 py-2.5 flex items-start gap-3', style.bg)}>
+              <span className={cn('flex items-center justify-center h-6 w-6 rounded-md shrink-0 mt-0.5', style.badge)}>
+                <Icon className="h-3.5 w-3.5" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={cn('text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider', style.badge)}>
+                    {p.severity}
+                  </span>
+                  <span className="text-[9px] font-mono text-muted-foreground/40">{time}</span>
+                </div>
+                <div className="text-[11px] text-foreground mt-1 leading-relaxed">
+                  {p.description}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  Main MetricsView
 // ══════════════════════════════════════════════════════════════════════════════
@@ -465,6 +564,7 @@ export function MetricsView() {
   const { data: summary, isLoading } = useOtelSummary(effectiveSessionId)
   const { data: otelEvents } = useOtelEvents(effectiveSessionId)
   const { data: analytics } = useOtelAnalytics(effectiveSessionId)
+  const { data: vulnerabilities } = useOtelVulnerabilities(effectiveSessionId)
 
   if (isLoading) {
     return (
@@ -565,6 +665,9 @@ export function MetricsView() {
             <TurnEfficiency data={analytics.turnEfficiency} />
           </>
         )}
+
+        {/* Vulnerability patterns */}
+        {vulnerabilities && <VulnerabilityPanel data={vulnerabilities} />}
 
         {/* Cost + latency sparklines */}
         <CostOverTime events={otelEvents} />

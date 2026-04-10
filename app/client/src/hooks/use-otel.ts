@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { api, type OtelSummary, type OtelEvent, type OtelAnalytics } from '@/lib/api-client'
+import { api, type OtelSummary, type OtelEvent, type OtelAnalytics, type OtelVulnerabilities } from '@/lib/api-client'
 
 // Invalidation is handled by use-websocket.ts (otel_event message type).
 
@@ -30,6 +30,16 @@ export function useOtelAnalytics(sessionId: string | null) {
     enabled: !!sessionId,
     refetchInterval: false,
     staleTime: 10_000,
+  })
+}
+
+export function useOtelVulnerabilities(sessionId: string | null) {
+  return useQuery({
+    queryKey: ['otel-vulnerabilities', sessionId],
+    queryFn: () => api.getOtelVulnerabilities(sessionId!),
+    enabled: !!sessionId,
+    refetchInterval: false,
+    staleTime: 30_000,
   })
 }
 
