@@ -1,12 +1,10 @@
-import { useMemo } from 'react'
 import { useCallback } from 'react'
 import { useUIStore } from '@/stores/ui-store'
 import { useOtelSummary, useOtelEvents, useOtelAnalytics, useOtelVulnerabilities } from '@/hooks/use-otel'
-import { Sparkline, MiniBar, RingGauge } from './sparkline'
 import { cn } from '@/lib/utils'
 import {
   DollarSign, Zap, Clock, Database, TrendingUp, AlertCircle,
-  AlertTriangle, RotateCcw, Activity, Shield, ShieldAlert, ShieldCheck, Repeat, Ban, TrendingDown,
+  AlertTriangle, RotateCcw, Shield, ShieldAlert, ShieldCheck, Repeat, Ban, TrendingDown,
 } from 'lucide-react'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -35,17 +33,16 @@ function fmtPct(n: number) {
   return `${Math.round(n * 100)}%`
 }
 
-// ── KPI card ─────────────────────────────────────────────────────────────────
+// ── KPI card (no sparkline) ─────────────────────────────────────────────────
 
 function KpiCard({
-  icon: Icon, label, value, sub, accent, trend,
+  icon: Icon, label, value, sub, accent,
 }: {
   icon: typeof DollarSign
   label: string
   value: string
   sub?: string
   accent: string
-  trend?: number[]
 }) {
   return (
     <div className="rounded-xl border border-border/60 bg-card px-4 py-3 flex items-start gap-3">
@@ -60,9 +57,6 @@ function KpiCard({
         <div className="text-xl font-bold text-foreground leading-tight mt-0.5">{value}</div>
         {sub && <div className="text-[10px] text-muted-foreground/60 mt-0.5">{sub}</div>}
       </div>
-      {trend && trend.length > 1 && (
-        <Sparkline data={trend} width={72} height={32} color={accent} className="shrink-0 self-center" />
-      )}
     </div>
   )
 }
@@ -138,7 +132,7 @@ function RequestTable({ events }: { events: ReturnType<typeof useOtelEvents>['da
   )
 }
 
-// ── Model breakdown ───────────────────────────────────────────────────────────
+// ── Model breakdown (pure CSS bars, no SVG) ──────────────────────────────────
 
 function ModelBreakdown({ breakdown }: { breakdown: Record<string, { cost: number; requests: number; tokens: number }> }) {
   const entries = Object.entries(breakdown).sort((a, b) => b[1].cost - a[1].cost)
@@ -151,28 +145,37 @@ function ModelBreakdown({ breakdown }: { breakdown: Record<string, { cost: numbe
     <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-3">Model Breakdown</div>
       <div className="space-y-2.5">
-        {entries.map(([model, stats], i) => (
-          <div key={model}>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium truncate">
-                {model.split('-').slice(-2).join('-')}
-              </span>
-              <div className="flex items-center gap-2 shrink-0 ml-2">
-                <span className="text-[9px] text-muted-foreground/50">{stats.requests} req</span>
-                <span className="text-[10px] font-mono" style={{ color: colors[i % colors.length] }}>
-                  {fmt$(stats.cost)}
+        {entries.map(([model, stats], i) => {
+          const pct = maxCost > 0 ? Math.min(1, stats.cost / maxCost) : 0
+          const color = colors[i % colors.length]
+          return (
+            <div key={model}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-medium truncate">
+                  {model.split('-').slice(-2).join('-')}
                 </span>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="text-[9px] text-muted-foreground/50">{stats.requests} req</span>
+                  <span className="text-[10px] font-mono" style={{ color }}>
+                    {fmt$(stats.cost)}
+                  </span>
+                </div>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct * 100}%`, backgroundColor: color }}
+                />
               </div>
             </div>
-            <MiniBar value={stats.cost} max={maxCost} color={colors[i % colors.length]} />
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
 }
 
-// ── Token breakdown ───────────────────────────────────────────────────────────
+// ── Token breakdown (pure CSS bars, no SVG) ──────────────────────────────────
 
 function TokenBreakdown({ tokens, cacheHitRate }: {
   tokens: { input: number; output: number; cacheRead: number; cacheCreation: number }
@@ -189,72 +192,39 @@ function TokenBreakdown({ tokens, cacheHitRate }: {
   ].filter(b => b.value > 0)
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card px-4 py-3 flex gap-4 items-start">
-      <div className="flex-1 min-w-0">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-3">Token Distribution</div>
-        <div className="space-y-2">
-          {bars.map(b => (
-            <MiniBar key={b.label} label={b.label} value={b.value} max={total} color={b.color} />
-          ))}
-        </div>
-        <div className="mt-2 pt-2 border-t border-border/30 flex justify-between text-[9px] text-muted-foreground/50">
-          <span>Total</span>
-          <span className="font-mono">{fmtTokens(total)}</span>
-        </div>
-      </div>
-      <div className="shrink-0">
-        <RingGauge
-          value={cacheHitRate}
-          label="Cache"
-          sublabel="hit rate"
-          color="#06b6d4"
-          size={72}
-        />
-      </div>
-    </div>
-  )
-}
-
-// ── Cost + latency sparkline ─────────────────────────────────────────────────
-
-function CostOverTime({ events }: { events: ReturnType<typeof useOtelEvents>['data'] }) {
-  const { costs, latencies } = useMemo(() => {
-    const apiEvs = events?.filter(e => e.event_name === 'claude_code.api_request') ?? []
-    let cum = 0
-    const costs = apiEvs.map(e => { cum += e.cost_usd ?? 0; return cum })
-    const latencies = apiEvs.map(e => e.duration_ms ?? 0).filter(v => v > 0)
-    return { costs, latencies }
-  }, [events])
-
-  if (costs.length < 2) return null
-
-  return (
     <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">누적 비용</div>
-          <Sparkline data={costs} width="100%" height={56} color="#22c55e" fill />
-          <div className="mt-1 text-[9px] text-muted-foreground/40 font-mono">
-            {costs.length}회 API 호출
-          </div>
-        </div>
-        {latencies.length > 1 && (
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">API 지연시간</div>
-            <Sparkline data={latencies} width="100%" height={56} color="#3b82f6" fill />
-            <div className="mt-1 text-[9px] text-muted-foreground/40 font-mono">
-              avg {fmtMs(latencies.reduce((a, b) => a + b, 0) / latencies.length)}
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">Token Distribution</div>
+        <span className="text-xs font-mono font-bold" style={{ color: '#06b6d4' }}>
+          Cache {fmtPct(cacheHitRate)}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {bars.map(b => {
+          const pct = total > 0 ? Math.min(1, b.value / total) : 0
+          return (
+            <div key={b.label} className="flex items-center gap-2">
+              <span className="text-[9px] text-muted-foreground/60 w-16 shrink-0 truncate">{b.label}</span>
+              <div className="flex-1 h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct * 100}%`, backgroundColor: b.color }}
+                />
+              </div>
+              <span className="text-[9px] font-mono text-muted-foreground/70 w-12 text-right shrink-0">
+                {fmtTokens(b.value)}
+              </span>
             </div>
-          </div>
-        )}
+          )
+        })}
+      </div>
+      <div className="mt-2 pt-2 border-t border-border/30 flex justify-between text-[9px] text-muted-foreground/50">
+        <span>Total</span>
+        <span className="font-mono">{fmtTokens(total)}</span>
       </div>
     </div>
   )
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  Analytics sections (from /otel-analytics)
-// ══════════════════════════════════════════════════════════════════════════════
 
 // ── Waste cost card ──────────────────────────────────────────────────────────
 
@@ -280,130 +250,6 @@ function WasteCard({ waste, totalCost }: {
             실패한 도구 호출이 포함된 턴의 누적 API 비용 ({waste.failedToolCalls}건 실패)
           </div>
         </div>
-        <RingGauge
-          value={wastePct}
-          label="Waste"
-          color="#ef4444"
-          size={56}
-        />
-      </div>
-    </div>
-  )
-}
-
-// ── Cache efficiency curve ───────────────────────────────────────────────────
-
-function CacheEfficiencyCurve({ data }: {
-  data: Array<{ timestamp: number; ratio: number; cumulativeCost: number }>
-}) {
-  if (data.length < 2) return null
-
-  const ratios = data.map(d => d.ratio)
-  const costs = data.map(d => d.cumulativeCost)
-  const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length
-  const lastRatio = ratios[ratios.length - 1]
-
-  return (
-    <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
-            캐시 효율 추이
-          </div>
-          <Sparkline data={ratios} width="100%" height={56} color="#06b6d4" fill />
-          <div className="mt-1 flex justify-between text-[9px] text-muted-foreground/40 font-mono">
-            <span>avg {fmtPct(avgRatio)}</span>
-            <span>last {fmtPct(lastRatio)}</span>
-          </div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
-            누적 비용 곡선
-          </div>
-          <Sparkline data={costs} width="100%" height={56} color="#f59e0b" fill />
-          <div className="mt-1 text-[9px] text-muted-foreground/40 font-mono text-right">
-            total {fmt$(costs[costs.length - 1])}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Turn efficiency scatter ──────────────────────────────────────────────────
-
-function TurnEfficiency({ data }: {
-  data: Array<{
-    promptId: string; timestamp: number; cost: number
-    toolCount: number; failCount: number; actionsPerDollar: number
-  }>
-}) {
-  if (data.length < 2) return null
-
-  // Categorize turns
-  const thinking = data.filter(t => t.toolCount === 0 && t.cost > 0)
-  const efficient = data.filter(t => t.toolCount > 0 && t.failCount === 0)
-  const wasteful = data.filter(t => t.failCount > 0)
-
-  const maxCost = Math.max(...data.map(t => t.cost))
-  const maxTools = Math.max(...data.map(t => t.toolCount), 1)
-
-  return (
-    <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-3">
-        턴 효율 ({data.length}턴)
-      </div>
-
-      {/* Scatter-like dot grid */}
-      <div className="relative h-20 mb-2">
-        <svg width="100%" height="100%" viewBox="0 0 400 80" preserveAspectRatio="none">
-          {/* Grid lines */}
-          <line x1="0" y1="40" x2="400" y2="40" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4 4" />
-          <line x1="0" y1="20" x2="400" y2="20" stroke="currentColor" strokeOpacity="0.05" strokeDasharray="4 4" />
-          <line x1="0" y1="60" x2="400" y2="60" stroke="currentColor" strokeOpacity="0.05" strokeDasharray="4 4" />
-
-          {data.map((t, i) => {
-            const x = (i / Math.max(data.length - 1, 1)) * 380 + 10
-            const y = 75 - (t.toolCount / maxTools) * 65
-            const r = Math.max(2, Math.min(6, (t.cost / maxCost) * 6))
-            const color = t.failCount > 0 ? '#ef4444' : t.toolCount === 0 ? '#6b7280' : '#22c55e'
-            return (
-              <circle
-                key={t.promptId}
-                cx={x} cy={y} r={r}
-                fill={color} fillOpacity={0.7}
-              />
-            )
-          })}
-        </svg>
-        <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1 text-[8px] text-muted-foreground/30">
-          <span>Turn 1</span>
-          <span>Turn {data.length}</span>
-        </div>
-        <div className="absolute top-0 left-0 bottom-0 flex flex-col justify-between py-0 text-[8px] text-muted-foreground/30">
-          <span>{maxTools} tools</span>
-          <span>0</span>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex gap-4 text-[9px]">
-        <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span className="text-muted-foreground/60">성공 ({efficient.length})</span>
-        </div>
-        {wasteful.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-red-500" />
-            <span className="text-muted-foreground/60">실패 포함 ({wasteful.length})</span>
-          </div>
-        )}
-        {thinking.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-gray-500" />
-            <span className="text-muted-foreground/60">Thinking only ({thinking.length})</span>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -466,10 +312,10 @@ const PATTERN_ICONS: Record<string, typeof Shield> = {
   token_surge: TrendingDown,
 }
 
-const SEVERITY_STYLES: Record<string, { border: string; bg: string; text: string; badge: string }> = {
-  critical: { border: 'border-red-500/30', bg: 'bg-red-500/5', text: 'text-red-400', badge: 'bg-red-500/15 text-red-400' },
-  warning: { border: 'border-amber-500/30', bg: 'bg-amber-500/5', text: 'text-amber-400', badge: 'bg-amber-500/15 text-amber-400' },
-  info: { border: 'border-blue-500/30', bg: 'bg-blue-500/5', text: 'text-blue-400', badge: 'bg-blue-500/15 text-blue-400' },
+const SEVERITY_STYLES: Record<string, { bg: string; badge: string }> = {
+  critical: { bg: 'bg-red-500/5', badge: 'bg-red-500/15 text-red-400' },
+  warning: { bg: 'bg-amber-500/5', badge: 'bg-amber-500/15 text-amber-400' },
+  info: { bg: 'bg-blue-500/5', badge: 'bg-blue-500/15 text-blue-400' },
 }
 
 function VulnerabilityPanel({ data, onNavigateToFlow }: {
@@ -500,7 +346,6 @@ function VulnerabilityPanel({ data, onNavigateToFlow }: {
 
   return (
     <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
-      {/* Header with severity counts */}
       <div className="px-4 py-2.5 border-b border-border/40 flex items-center gap-2">
         <Shield className="h-3.5 w-3.5 text-muted-foreground/60" />
         <span className="text-xs font-semibold">패턴 감지</span>
@@ -523,7 +368,6 @@ function VulnerabilityPanel({ data, onNavigateToFlow }: {
         </div>
       </div>
 
-      {/* Pattern list */}
       <div className="divide-y divide-border/20">
         {data.patterns.map((p) => {
           const style = SEVERITY_STYLES[p.severity] || SEVERITY_STYLES.info
@@ -620,11 +464,6 @@ export function MetricsView() {
     ? summary.totalTokens.cacheRead / totalTok
     : 0
 
-  // Cost trend per API call
-  const apiCosts = otelEvents
-    ?.filter(e => e.event_name === 'claude_code.api_request' && e.cost_usd != null)
-    .map(e => e.cost_usd as number) ?? []
-
   const latencies = otelEvents
     ?.filter(e => e.event_name === 'claude_code.api_request' && e.duration_ms != null)
     .map(e => e.duration_ms as number) ?? []
@@ -641,7 +480,6 @@ export function MetricsView() {
             value={fmt$(summary.totalCost)}
             sub={`${summary.apiRequestCount}회 API 호출`}
             accent="#22c55e"
-            trend={apiCosts}
           />
           <KpiCard
             icon={Zap}
@@ -656,7 +494,6 @@ export function MetricsView() {
             value={fmtMs(summary.avgLatencyMs)}
             sub={latencies.length > 0 ? `최대 ${fmtMs(Math.max(...latencies))}` : undefined}
             accent="#a855f7"
-            trend={latencies}
           />
           <KpiCard
             icon={Database}
@@ -667,36 +504,26 @@ export function MetricsView() {
           />
         </div>
 
-        {/* Analytics section */}
-        {analytics && (
-          <>
-            {/* Waste + Retries row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <WasteCard waste={analytics.waste} totalCost={summary.totalCost} />
-              <RetryList retries={analytics.retries} />
-            </div>
-
-            {/* Cache efficiency + cumulative cost */}
-            <CacheEfficiencyCurve data={analytics.cacheEfficiency} />
-
-            {/* Turn efficiency scatter */}
-            <TurnEfficiency data={analytics.turnEfficiency} />
-          </>
-        )}
-
-        {/* Vulnerability patterns */}
-        {vulnerabilities && <VulnerabilityPanel data={vulnerabilities} onNavigateToFlow={handleNavigateToFlow} />}
-
-        {/* Cost + latency sparklines */}
-        <CostOverTime events={otelEvents} />
-
-        {/* Token breakdown + cache gauge */}
+        {/* Token breakdown */}
         <TokenBreakdown tokens={summary.totalTokens} cacheHitRate={cacheHitRate} />
 
         {/* Model breakdown */}
         {Object.keys(summary.modelBreakdown).length > 0 && (
           <ModelBreakdown breakdown={summary.modelBreakdown} />
         )}
+
+        {/* Analytics section */}
+        {analytics && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <WasteCard waste={analytics.waste} totalCost={summary.totalCost} />
+              <RetryList retries={analytics.retries} />
+            </div>
+          </>
+        )}
+
+        {/* Vulnerability patterns */}
+        {vulnerabilities && <VulnerabilityPanel data={vulnerabilities} onNavigateToFlow={handleNavigateToFlow} />}
 
         {/* Per-request table */}
         <RequestTable events={otelEvents} />

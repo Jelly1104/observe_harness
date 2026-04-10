@@ -427,11 +427,20 @@ function detectVulnerabilities(events: Array<{
   }
 
   // ── 3. Infinite loop detection ─────────────────────────────────────────────
-  // Same tool called 3+ times consecutively across prompt turns
-  const toolSequence: Array<{ toolName: string; promptId: string; timestamp: number }> = []
+  // Same tool called consecutively across prompt turns.
+  // Generic tools (Bash, Read, Edit, Grep, Glob, Write) are used in long streaks
+  // during normal Claude Code operation, so they get a much higher threshold.
+  const GENERIC_TOOLS = new Set(['Bash', 'Read', 'Edit', 'Grep', 'Glob', 'Write', 'Agent'])
+  const GENERIC_THRESHOLD = 25  // only flag truly extreme streaks for generic tools
+  const SPECIFIC_THRESHOLD = 5  // lower threshold for specialized tools
+
+  const toolSequence: Array<{ toolName: string; promptId: string; timestamp: number; success: boolean }> = []
   for (const e of events) {
     if (e.event_name === 'claude_code.tool_result' && e.tool_name && e.prompt_id) {
-      toolSequence.push({ toolName: e.tool_name, promptId: e.prompt_id, timestamp: e.timestamp })
+      toolSequence.push({
+        toolName: e.tool_name, promptId: e.prompt_id,
+        timestamp: e.timestamp, success: e.success !== 'false',
+      })
     }
   }
 
@@ -442,16 +451,28 @@ function detectVulnerabilities(events: Array<{
       runEnd++
     }
     const runLen = runEnd - runStart
-    if (runLen >= 5) {
-      const tool = toolSequence[runStart].toolName
+    const tool = toolSequence[runStart].toolName
+    const threshold = GENERIC_TOOLS.has(tool) ? GENERIC_THRESHOLD : SPECIFIC_THRESHOLD
+
+    // For generic tools, also check if many calls failed (stronger loop signal)
+    const failCount = toolSequence.slice(runStart, runEnd).filter(t => !t.success).length
+    const failRate = failCount / runLen
+
+    if (runLen >= threshold || (runLen >= SPECIFIC_THRESHOLD && failRate > 0.5)) {
+      const severity: Severity =
+        (runLen >= threshold * 2 || failRate > 0.7) ? 'critical' :
+        (runLen >= threshold || failRate > 0.5) ? 'warning' : 'info'
+
       results.push({
         id: `loop-${toolSequence[runStart].promptId}-${tool}`,
-        severity: runLen >= 8 ? 'critical' : 'warning',
+        severity,
         pattern: 'loop_detected',
-        description: `${tool}이 ${runLen}회 연속 호출 — 무한 루프 징후`,
+        description: failRate > 0.3
+          ? `${tool}이 ${runLen}회 연속 호출 (${failCount}회 실패) — 반복 실패 패턴`
+          : `${tool}이 ${runLen}회 연속 호출 — 무한 루프 징후`,
         promptId: toolSequence[runStart].promptId,
         timestamp: toolSequence[runStart].timestamp,
-        details: { toolName: tool, consecutiveCalls: runLen },
+        details: { toolName: tool, consecutiveCalls: runLen, failCount, failRate: Math.round(failRate * 100) / 100 },
       })
     }
     runStart = runEnd

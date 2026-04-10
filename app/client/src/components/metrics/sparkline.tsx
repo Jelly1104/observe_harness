@@ -39,11 +39,15 @@ export function Sparkline({
       ` L${xs[xs.length - 1]},${height - pad} Z`
 
     return { linePts, areaPath }
-  }, [data, width, height])
+  }, [data, height])
+
+  // Stable gradient ID — avoid Math.random() on each render (breaks React strict mode)
+  const id = useMemo(
+    () => `spark-${color.replace('#', '')}-${Math.random().toString(36).slice(2, 6)}`,
+    [color],
+  )
 
   if (!points) return null
-
-  const id = `spark-${color.replace('#', '')}-${Math.random().toString(36).slice(2, 6)}`
 
   return (
     <svg
