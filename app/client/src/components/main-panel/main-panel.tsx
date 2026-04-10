@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useUIStore } from '@/stores/ui-store'
 import { ScopeBar } from './scope-bar'
 import { EventFilterBar } from './event-filter-bar'
@@ -11,11 +10,8 @@ import { HomePage } from './home-page'
 import { ProjectPage } from './project-page'
 import { cn } from '@/lib/utils'
 
-type ViewTab = 'events' | 'flow' | 'metrics'
-
 export function MainPanel() {
-  const { selectedProjectId, selectedSessionId } = useUIStore()
-  const [activeTab, setActiveTab] = useState<ViewTab>('events')
+  const { selectedProjectId, selectedSessionId, activeTab, setActiveTab } = useUIStore()
   const hasOtel = useHasOtelData(selectedSessionId ?? undefined)
 
   if (!selectedProjectId) {

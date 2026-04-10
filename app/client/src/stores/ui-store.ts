@@ -86,6 +86,14 @@ interface UIState {
   autoFollow: boolean
   setAutoFollow: (enabled: boolean) => void
 
+  // Tab navigation
+  activeTab: 'events' | 'flow' | 'metrics'
+  setActiveTab: (tab: 'events' | 'flow' | 'metrics') => void
+
+  // Cross-tab flow navigation (Metrics → Flow)
+  scrollToFlowTimestamp: number | null
+  setScrollToFlowTimestamp: (ts: number | null) => void
+
   // Icon customization reactivity
   iconCustomizationVersion: number
   bumpIconCustomizationVersion: () => void
@@ -217,6 +225,12 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   autoFollow: true,
   setAutoFollow: (enabled) => set({ autoFollow: enabled }),
+
+  activeTab: 'events',
+  setActiveTab: (tab) => set({ activeTab: tab }),
+
+  scrollToFlowTimestamp: null,
+  setScrollToFlowTimestamp: (ts) => set({ scrollToFlowTimestamp: ts }),
 
   iconCustomizationVersion: 0,
   bumpIconCustomizationVersion: () => set((s) => ({ iconCustomizationVersion: s.iconCustomizationVersion + 1 })),

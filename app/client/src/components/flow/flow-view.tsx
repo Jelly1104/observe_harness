@@ -629,7 +629,7 @@ function DocSidebar({ lanes, filterDocs, filterAgents, onToggleDoc }: {
 // ── Main FlowView ────────────────────────────────────────────────────
 
 export function FlowView() {
-  const { selectedProjectId, selectedSessionId, setScrollToEventId } = useUIStore()
+  const { selectedProjectId, selectedSessionId, setScrollToEventId, scrollToFlowTimestamp, setScrollToFlowTimestamp } = useUIStore()
   const { data: sessions } = useSessions(selectedProjectId)
   const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null
   const { data: events } = useEvents(effectiveSessionId)
@@ -762,6 +762,38 @@ export function FlowView() {
     setSelectedNodeId(prev => prev === id ? null : id)
     setScrollToEventId(id)
   }, [setScrollToEventId])
+
+  // Cross-tab navigation: Metrics → Flow (via timestamp)
+  useEffect(() => {
+    if (!scrollToFlowTimestamp || !graph || !contentRef.current) return
+
+    // Find the node closest to the target timestamp
+    let bestNode: { id: number; diff: number } | null = null
+    for (const lane of graph.lanes) {
+      for (const node of lane.nodes) {
+        const diff = Math.abs(node.timestamp - scrollToFlowTimestamp)
+        if (!bestNode || diff < bestNode.diff) {
+          bestNode = { id: node.id, diff }
+        }
+      }
+    }
+
+    if (bestNode) {
+      setSelectedNodeId(bestNode.id)
+      // Wait for render, then scroll to the node
+      requestAnimationFrame(() => {
+        const el = contentRef.current?.querySelector(`[data-node-id="${bestNode!.id}"]`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // Flash animation
+          el.classList.add('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-background')
+          setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-1', 'ring-offset-background'), 2000)
+        }
+      })
+    }
+
+    setScrollToFlowTimestamp(null)
+  }, [scrollToFlowTimestamp, graph, setScrollToFlowTimestamp])
 
   const handleToggleDoc = useCallback((doc: string) => {
     setFilterDocs(prev => {

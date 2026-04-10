@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useCallback } from 'react'
 import { useUIStore } from '@/stores/ui-store'
 import { useOtelSummary, useOtelEvents, useOtelAnalytics, useOtelVulnerabilities } from '@/hooks/use-otel'
 import { Sparkline, MiniBar, RingGauge } from './sparkline'
@@ -471,11 +472,12 @@ const SEVERITY_STYLES: Record<string, { border: string; bg: string; text: string
   info: { border: 'border-blue-500/30', bg: 'bg-blue-500/5', text: 'text-blue-400', badge: 'bg-blue-500/15 text-blue-400' },
 }
 
-function VulnerabilityPanel({ data }: {
+function VulnerabilityPanel({ data, onNavigateToFlow }: {
   data: { summary: { critical: number; warning: number; info: number }; patterns: Array<{
     id: string; severity: string; pattern: string; description: string
     promptId: string | null; timestamp: number; details: Record<string, unknown>
   }> }
+  onNavigateToFlow?: (timestamp: number) => void
 }) {
   const total = data.summary.critical + data.summary.warning + data.summary.info
   if (total === 0) {
@@ -531,7 +533,16 @@ function VulnerabilityPanel({ data }: {
           })
 
           return (
-            <div key={p.id} className={cn('px-4 py-2.5 flex items-start gap-3', style.bg)}>
+            <div
+              key={p.id}
+              className={cn(
+                'px-4 py-2.5 flex items-start gap-3 transition-colors',
+                style.bg,
+                onNavigateToFlow && 'cursor-pointer hover:brightness-110',
+              )}
+              onClick={() => onNavigateToFlow?.(p.timestamp)}
+              title="Flow 탭에서 보기"
+            >
               <span className={cn('flex items-center justify-center h-6 w-6 rounded-md shrink-0 mt-0.5', style.badge)}>
                 <Icon className="h-3.5 w-3.5" />
               </span>
@@ -561,10 +572,17 @@ function VulnerabilityPanel({ data }: {
 export function MetricsView() {
   const { selectedSessionId } = useUIStore()
   const effectiveSessionId = selectedSessionId
+  const setActiveTab = useUIStore(s => s.setActiveTab)
+  const setScrollToFlowTimestamp = useUIStore(s => s.setScrollToFlowTimestamp)
   const { data: summary, isLoading } = useOtelSummary(effectiveSessionId)
   const { data: otelEvents } = useOtelEvents(effectiveSessionId)
   const { data: analytics } = useOtelAnalytics(effectiveSessionId)
   const { data: vulnerabilities } = useOtelVulnerabilities(effectiveSessionId)
+
+  const handleNavigateToFlow = useCallback((timestamp: number) => {
+    setScrollToFlowTimestamp(timestamp)
+    setActiveTab('flow')
+  }, [setActiveTab, setScrollToFlowTimestamp])
 
   if (isLoading) {
     return (
@@ -667,7 +685,7 @@ export function MetricsView() {
         )}
 
         {/* Vulnerability patterns */}
-        {vulnerabilities && <VulnerabilityPanel data={vulnerabilities} />}
+        {vulnerabilities && <VulnerabilityPanel data={vulnerabilities} onNavigateToFlow={handleNavigateToFlow} />}
 
         {/* Cost + latency sparklines */}
         <CostOverTime events={otelEvents} />
