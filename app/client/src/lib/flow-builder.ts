@@ -49,6 +49,7 @@ export type NodeKind =
   | 'hook'         // UserPromptSubmit with hook output
   | 'stop'         // Stop / session end
   | 'compact'      // PreCompact / PostCompact
+  | 'delegation'   // Input prompt from parent agent to subagent
   | 'session'      // SessionStart / SessionEnd
   | 'task'         // TaskCreated / TaskCompleted
   | 'permission'   // PermissionRequest
@@ -646,20 +647,20 @@ export function buildFlowGraph(events: ParsedEvent[], agents: Agent[], forkedSki
       const targetAgentId = (p.agent_id as string) || ev.agentId
       const agent = agentMap.get(targetAgentId)
       if (agent?.parentAgentId) {
-        // If the subagent lane has no nodes (agent did work without tool calls),
-        // create input + output placeholder nodes so the lane shows the full task
         const subLane = getOrCreateLane(targetAgentId)
-        if (subLane.nodes.length === 0) {
-          const spawnInfo = spawnInfoBySubagent.get(targetAgentId)
-          const outputText = (p.last_assistant_message || p.result || '').toString()
+        const spawnInfo = spawnInfoBySubagent.get(targetAgentId)
+        const outputText = (p.last_assistant_message || p.result || '').toString()
 
-          const desc = spawnInfo?.description || agent.agentType || agent.description || agent.name || ''
-          const subType = spawnInfo?.subType || agent.agentType || ''
-          const prompt = spawnInfo?.prompt || ''
-          const btwInput = (p._btw_input as string) || ''
-          const isSideQuestion = !spawnInfo && !agent.agentType
+        const desc = spawnInfo?.description || agent.agentType || agent.description || agent.name || ''
+        const subType = spawnInfo?.subType || agent.agentType || ''
+        const prompt = spawnInfo?.prompt || ''
+        const btwInput = (p._btw_input as string) || ''
+        const isSideQuestion = !spawnInfo && !agent.agentType
 
-          // Input node: task description from spawn info, /btw user input, or fallback
+        // Always prepend an input node if the lane doesn't already start with one.
+        // This shows "what was the subagent asked to do?" at the top of every lane.
+        const hasInputNode = subLane.nodes.length > 0 && subLane.nodes[0].kind === 'prompt'
+        if (!hasInputNode) {
           const inputLabel = desc
             ? truncate(desc, 60)
             : btwInput
@@ -667,21 +668,45 @@ export function buildFlowGraph(events: ParsedEvent[], agents: Agent[], forkedSki
               : isSideQuestion
                 ? 'Side question (/btw)'
                 : `${subType || 'sub'} task`
+          const firstExistingNode = subLane.nodes[0]
+          const inputTs = firstExistingNode ? firstExistingNode.timestamp - 1 : ev.timestamp - 1
           const inputNode: FlowNode = {
             id: ev.id * 1000 + 1,
-            kind: 'prompt',
+            kind: isSideQuestion ? 'prompt' : 'delegation',
             tool: null,
             label: inputLabel,
             detail: prompt || btwInput || desc || (isSideQuestion ? 'Input not captured — /btw side question' : 'Side task'),
-            timestamp: ev.timestamp - 1,
+            timestamp: inputTs,
             agentId: targetAgentId,
             docPaths: [],
             isError: false,
             status: 'success',
           }
-          addNode(inputNode)
 
-          // Output node
+          // Prepend: insert at the beginning and fix sequential edges
+          if (firstExistingNode) {
+            subLane.nodes.unshift(inputNode)
+            // Add edge from input → first existing node
+            edges.push({
+              fromNodeId: inputNode.id,
+              toNodeId: firstExistingNode.id,
+              fromAgentId: targetAgentId,
+              toAgentId: targetAgentId,
+              kind: 'sequential',
+            })
+            // Fix spawn edge: re-target to input node instead of first tool node
+            for (const edge of edges) {
+              if (edge.kind === 'spawn' && edge.toAgentId === targetAgentId && edge.toNodeId === firstExistingNode.id) {
+                edge.toNodeId = inputNode.id
+              }
+            }
+          } else {
+            addNode(inputNode)
+          }
+        }
+
+        // Add output node only when lane had no tool calls (empty lane)
+        if (subLane.nodes.length <= 1) {
           const outputNode: FlowNode = {
             id: ev.id * 1000 + 2,
             kind: 'stop',

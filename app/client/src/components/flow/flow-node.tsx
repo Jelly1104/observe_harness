@@ -35,6 +35,7 @@ export const KIND_THEME: Record<string, {
   label: string
 }> = {
   prompt:         { iconBg: 'bg-green-600',   iconColor: 'text-white',      accent: '#22c55e', label: 'Prompt' },
+  delegation:     { iconBg: 'bg-cyan-600',    iconColor: 'text-white',      accent: '#06b6d4', label: 'Delegation' },
   skill:          { iconBg: 'bg-yellow-600',  iconColor: 'text-white',      accent: '#eab308', label: 'Skill' },
   tool:           { iconBg: 'bg-blue-600',    iconColor: 'text-white',      accent: '#3b82f6', label: 'Tool' },
   'doc-read':     { iconBg: 'bg-emerald-600', iconColor: 'text-white',      accent: '#10b981', label: 'Doc' },
@@ -74,6 +75,7 @@ export const FlowNodeComponent = memo(function FlowNodeComponent({
   const theme = KIND_THEME[node.kind] || KIND_THEME.tool
   const Icon = TOOL_ICONS[node.tool || ''] || (
     node.kind === 'prompt' ? MessageSquare :
+    node.kind === 'delegation' ? ArrowRight :
     node.kind === 'stop' ? CircleStop :
     node.kind === 'error' ? AlertTriangle :
     node.kind === 'hook' ? Lock :
