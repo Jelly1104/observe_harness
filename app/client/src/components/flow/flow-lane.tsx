@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { FlowNodeComponent, KIND_THEME } from './flow-node'
 import { useFlowDensity, DENSITY_STYLES, type FlowDensity } from './flow-density'
 import type { FlowLane as FlowLaneType, FlowNode } from '@/lib/flow-builder'
-import { Bot, User, ChevronDown, ChevronRight, CircleDot, Clock } from 'lucide-react'
+import { Bot, User, ChevronDown, ChevronRight, CircleDot, Clock, DollarSign } from 'lucide-react'
 
 const LANE_MIN_WIDTH: Record<FlowDensity, { main: string; sub: string }> = {
   compact:  { main: 'min-w-[180px]', sub: 'min-w-[170px]' },
@@ -219,6 +219,17 @@ export const FlowLane = memo(function FlowLane({
   const density = useFlowDensity()
   const laneW = LANE_MIN_WIDTH[density]
 
+  // Aggregate OTel cost for this lane
+  const laneCost = useMemo(() => {
+    let total = 0
+    let failCount = 0
+    for (const n of lane.nodes) {
+      if (n.otel?.costUsd) total += n.otel.costUsd
+      if (n.isError) failCount++
+    }
+    return { total, failCount }
+  }, [lane.nodes])
+
   return (
     <div className={cn(
       'flex flex-col shrink-0',
@@ -252,6 +263,20 @@ export const FlowLane = memo(function FlowLane({
                 title={lane.model || undefined}
               >
                 {lane.modelShort}
+              </span>
+            )}
+            {laneCost.total > 0 && (
+              <span className={cn(
+                'ml-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono text-[9px] font-semibold',
+                laneCost.total > 1 ? 'bg-red-500/10 text-red-400' :
+                laneCost.total > 0.1 ? 'bg-amber-500/10 text-amber-400' :
+                'bg-emerald-500/10 text-emerald-400',
+              )}>
+                <DollarSign className="h-2.5 w-2.5" />
+                {laneCost.total < 0.01 ? laneCost.total.toFixed(4) : laneCost.total.toFixed(3)}
+                {laneCost.failCount > 0 && (
+                  <span className="text-red-400/70 ml-0.5">({laneCost.failCount} err)</span>
+                )}
               </span>
             )}
           </div>

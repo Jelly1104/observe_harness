@@ -1,9 +1,12 @@
 import { useMemo } from 'react'
 import { useUIStore } from '@/stores/ui-store'
-import { useOtelSummary, useOtelEvents } from '@/hooks/use-otel'
+import { useOtelSummary, useOtelEvents, useOtelAnalytics } from '@/hooks/use-otel'
 import { Sparkline, MiniBar, RingGauge } from './sparkline'
 import { cn } from '@/lib/utils'
-import { DollarSign, Zap, Clock, Database, TrendingUp, AlertCircle } from 'lucide-react'
+import {
+  DollarSign, Zap, Clock, Database, TrendingUp, AlertCircle,
+  AlertTriangle, RotateCcw, Activity,
+} from 'lucide-react'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +28,10 @@ function fmtTokens(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
   return `${n}`
+}
+
+function fmtPct(n: number) {
+  return `${Math.round(n * 100)}%`
 }
 
 // ── KPI card ─────────────────────────────────────────────────────────────────
@@ -207,7 +214,7 @@ function TokenBreakdown({ tokens, cacheHitRate }: {
   )
 }
 
-// ── Cost sparkline panel ──────────────────────────────────────────────────────
+// ── Cost + latency sparkline ─────────────────────────────────────────────────
 
 function CostOverTime({ events }: { events: ReturnType<typeof useOtelEvents>['data'] }) {
   const { costs, latencies } = useMemo(() => {
@@ -244,13 +251,220 @@ function CostOverTime({ events }: { events: ReturnType<typeof useOtelEvents>['da
   )
 }
 
-// ── Main MetricsView ─────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+//  Analytics sections (from /otel-analytics)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Waste cost card ──────────────────────────────────────────────────────────
+
+function WasteCard({ waste, totalCost }: {
+  waste: { cost: number; failedToolCalls: number }; totalCost: number
+}) {
+  if (waste.failedToolCalls === 0) return null
+  const wastePct = totalCost > 0 ? waste.cost / totalCost : 0
+
+  return (
+    <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+      <div className="flex items-start gap-3">
+        <span className="flex items-center justify-center h-8 w-8 rounded-lg shrink-0 mt-0.5 bg-red-500/15">
+          <AlertTriangle className="h-4 w-4 text-red-400" />
+        </span>
+        <div className="flex-1">
+          <div className="text-[10px] uppercase tracking-wider text-red-400/70">실패 비용 (Waste)</div>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <span className="text-xl font-bold text-red-400">{fmt$(waste.cost)}</span>
+            <span className="text-[10px] text-red-400/60">{fmtPct(wastePct)} of total</span>
+          </div>
+          <div className="text-[10px] text-muted-foreground/60 mt-1">
+            실패한 도구 호출이 포함된 턴의 누적 API 비용 ({waste.failedToolCalls}건 실패)
+          </div>
+        </div>
+        <RingGauge
+          value={wastePct}
+          label="Waste"
+          color="#ef4444"
+          size={56}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Cache efficiency curve ───────────────────────────────────────────────────
+
+function CacheEfficiencyCurve({ data }: {
+  data: Array<{ timestamp: number; ratio: number; cumulativeCost: number }>
+}) {
+  if (data.length < 2) return null
+
+  const ratios = data.map(d => d.ratio)
+  const costs = data.map(d => d.cumulativeCost)
+  const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length
+  const lastRatio = ratios[ratios.length - 1]
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
+            캐시 효율 추이
+          </div>
+          <Sparkline data={ratios} width="100%" height={56} color="#06b6d4" fill />
+          <div className="mt-1 flex justify-between text-[9px] text-muted-foreground/40 font-mono">
+            <span>avg {fmtPct(avgRatio)}</span>
+            <span>last {fmtPct(lastRatio)}</span>
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2">
+            누적 비용 곡선
+          </div>
+          <Sparkline data={costs} width="100%" height={56} color="#f59e0b" fill />
+          <div className="mt-1 text-[9px] text-muted-foreground/40 font-mono text-right">
+            total {fmt$(costs[costs.length - 1])}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Turn efficiency scatter ──────────────────────────────────────────────────
+
+function TurnEfficiency({ data }: {
+  data: Array<{
+    promptId: string; timestamp: number; cost: number
+    toolCount: number; failCount: number; actionsPerDollar: number
+  }>
+}) {
+  if (data.length < 2) return null
+
+  // Categorize turns
+  const thinking = data.filter(t => t.toolCount === 0 && t.cost > 0)
+  const efficient = data.filter(t => t.toolCount > 0 && t.failCount === 0)
+  const wasteful = data.filter(t => t.failCount > 0)
+
+  const maxCost = Math.max(...data.map(t => t.cost))
+  const maxTools = Math.max(...data.map(t => t.toolCount), 1)
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card px-4 py-3">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-3">
+        턴 효율 ({data.length}턴)
+      </div>
+
+      {/* Scatter-like dot grid */}
+      <div className="relative h-20 mb-2">
+        <svg width="100%" height="100%" viewBox="0 0 400 80" preserveAspectRatio="none">
+          {/* Grid lines */}
+          <line x1="0" y1="40" x2="400" y2="40" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="4 4" />
+          <line x1="0" y1="20" x2="400" y2="20" stroke="currentColor" strokeOpacity="0.05" strokeDasharray="4 4" />
+          <line x1="0" y1="60" x2="400" y2="60" stroke="currentColor" strokeOpacity="0.05" strokeDasharray="4 4" />
+
+          {data.map((t, i) => {
+            const x = (i / Math.max(data.length - 1, 1)) * 380 + 10
+            const y = 75 - (t.toolCount / maxTools) * 65
+            const r = Math.max(2, Math.min(6, (t.cost / maxCost) * 6))
+            const color = t.failCount > 0 ? '#ef4444' : t.toolCount === 0 ? '#6b7280' : '#22c55e'
+            return (
+              <circle
+                key={t.promptId}
+                cx={x} cy={y} r={r}
+                fill={color} fillOpacity={0.7}
+              />
+            )
+          })}
+        </svg>
+        <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1 text-[8px] text-muted-foreground/30">
+          <span>Turn 1</span>
+          <span>Turn {data.length}</span>
+        </div>
+        <div className="absolute top-0 left-0 bottom-0 flex flex-col justify-between py-0 text-[8px] text-muted-foreground/30">
+          <span>{maxTools} tools</span>
+          <span>0</span>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 text-[9px]">
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="text-muted-foreground/60">성공 ({efficient.length})</span>
+        </div>
+        {wasteful.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-red-500" />
+            <span className="text-muted-foreground/60">실패 포함 ({wasteful.length})</span>
+          </div>
+        )}
+        {thinking.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-gray-500" />
+            <span className="text-muted-foreground/60">Thinking only ({thinking.length})</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Retry detection ──────────────────────────────────────────────────────────
+
+function RetryList({ retries }: {
+  retries: Array<{
+    toolName: string; consecutiveAttempts: number
+    totalCost: number; finalSuccess: boolean
+  }>
+}) {
+  if (!retries.length) return null
+
+  return (
+    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+      <div className="flex items-center gap-2 mb-3">
+        <RotateCcw className="h-3.5 w-3.5 text-amber-400" />
+        <span className="text-[10px] uppercase tracking-wider text-amber-400/70">
+          재시도 감지 ({retries.length}건)
+        </span>
+      </div>
+      <div className="space-y-2">
+        {retries.map((r, i) => (
+          <div key={i} className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center gap-2">
+              <code className="px-1.5 py-0.5 rounded bg-foreground/5 text-[10px] font-mono">
+                {r.toolName}
+              </code>
+              <span className="text-muted-foreground/60">
+                {r.consecutiveAttempts}회 시도
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-amber-400 text-[10px]">{fmt$(r.totalCost)}</span>
+              <span className={cn(
+                'text-[9px] px-1.5 py-0.5 rounded',
+                r.finalSuccess
+                  ? 'bg-emerald-500/10 text-emerald-400'
+                  : 'bg-red-500/10 text-red-400'
+              )}>
+                {r.finalSuccess ? 'resolved' : 'failed'}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Main MetricsView
+// ══════════════════════════════════════════════════════════════════════════════
 
 export function MetricsView() {
   const { selectedSessionId } = useUIStore()
   const effectiveSessionId = selectedSessionId
   const { data: summary, isLoading } = useOtelSummary(effectiveSessionId)
   const { data: otelEvents } = useOtelEvents(effectiveSessionId)
+  const { data: analytics } = useOtelAnalytics(effectiveSessionId)
 
   if (isLoading) {
     return (
@@ -288,7 +502,7 @@ export function MetricsView() {
     ? summary.totalTokens.cacheRead / totalTok
     : 0
 
-  // Cost trend per API call (not cumulative — for sparkline in KPI)
+  // Cost trend per API call
   const apiCosts = otelEvents
     ?.filter(e => e.event_name === 'claude_code.api_request' && e.cost_usd != null)
     .map(e => e.cost_usd as number) ?? []
@@ -329,11 +543,28 @@ export function MetricsView() {
           <KpiCard
             icon={Database}
             label="캐시 히트율"
-            value={`${Math.round(cacheHitRate * 100)}%`}
+            value={fmtPct(cacheHitRate)}
             sub={`${fmtTokens(summary.totalTokens.cacheRead)} 토큰 절약`}
             accent="#06b6d4"
           />
         </div>
+
+        {/* Analytics section */}
+        {analytics && (
+          <>
+            {/* Waste + Retries row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <WasteCard waste={analytics.waste} totalCost={summary.totalCost} />
+              <RetryList retries={analytics.retries} />
+            </div>
+
+            {/* Cache efficiency + cumulative cost */}
+            <CacheEfficiencyCurve data={analytics.cacheEfficiency} />
+
+            {/* Turn efficiency scatter */}
+            <TurnEfficiency data={analytics.turnEfficiency} />
+          </>
+        )}
 
         {/* Cost + latency sparklines */}
         <CostOverTime events={otelEvents} />

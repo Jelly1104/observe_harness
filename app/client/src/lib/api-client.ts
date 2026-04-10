@@ -84,6 +84,8 @@ export const api = {
   },
   getOtelSummary: (sessionId: string) =>
     fetchJson<OtelSummary>(`/sessions/${encodeURIComponent(sessionId)}/otel-summary`),
+  getOtelAnalytics: (sessionId: string) =>
+    fetchJson<OtelAnalytics>(`/sessions/${encodeURIComponent(sessionId)}/otel-analytics`),
   getOtelEvents: (sessionId: string, filters?: { eventName?: string; promptId?: string; limit?: number }) => {
     const params = new URLSearchParams()
     if (filters?.eventName) params.set('event_name', filters.eventName)
@@ -104,6 +106,21 @@ export interface OtelSummary {
   avgLatencyMs: number | null
   modelBreakdown: Record<string, { cost: number; requests: number; tokens: number }>
   toolCosts: Array<{ promptId: string | null; toolName: string | null; cost: number | null; durationMs: number | null }>
+}
+
+export interface OtelAnalytics {
+  turnCount: number
+  waste: { cost: number; failedToolCalls: number }
+  cacheEfficiency: Array<{ timestamp: number; ratio: number; cumulativeCost: number }>
+  turnEfficiency: Array<{
+    promptId: string; timestamp: number; cost: number
+    toolCount: number; failCount: number; actionsPerDollar: number
+  }>
+  retries: Array<{
+    toolName: string; consecutiveAttempts: number
+    totalCost: number; finalSuccess: boolean; timestamps: number[]
+  }>
+  modelCosts: Record<string, { cost: number; turns: number; tokens: number }>
 }
 
 export interface OtelEvent {

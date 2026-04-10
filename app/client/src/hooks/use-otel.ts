@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { api, type OtelSummary, type OtelEvent } from '@/lib/api-client'
+import { api, type OtelSummary, type OtelEvent, type OtelAnalytics } from '@/lib/api-client'
 
 // Invalidation is handled by use-websocket.ts (otel_event message type).
 
@@ -17,6 +17,16 @@ export function useOtelEvents(sessionId: string | null, filters?: { eventName?: 
   return useQuery({
     queryKey: ['otel-events', sessionId, filters],
     queryFn: () => api.getOtelEvents(sessionId!, filters),
+    enabled: !!sessionId,
+    refetchInterval: false,
+    staleTime: 10_000,
+  })
+}
+
+export function useOtelAnalytics(sessionId: string | null) {
+  return useQuery({
+    queryKey: ['otel-analytics', sessionId],
+    queryFn: () => api.getOtelAnalytics(sessionId!),
     enabled: !!sessionId,
     refetchInterval: false,
     staleTime: 10_000,

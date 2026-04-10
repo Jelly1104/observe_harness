@@ -154,4 +154,168 @@ router.get('/analytics/summary', async (c) => {
   })
 })
 
+// ── Prompt-turn analytics ─────────────────────────────────────────────────────
+
+/** Aggregate OTel events by prompt_id to produce per-turn analytics */
+function buildPromptTurnAnalytics(events: Array<{
+  prompt_id: string | null; event_name: string; tool_name: string | null
+  cost_usd: number | null; duration_ms: number | null; input_tokens: number | null
+  output_tokens: number | null; cache_read_tokens: number | null
+  cache_creation_tokens: number | null; success: string | null; timestamp: number
+  model: string | null
+}>) {
+  // ── 1. Group by prompt_id ──────────────────────────────────────────────────
+  const turnMap = new Map<string, {
+    promptId: string; cost: number; inputTokens: number; outputTokens: number
+    cacheRead: number; cacheCreation: number; latencyMs: number; model: string | null
+    tools: Array<{ name: string; success: boolean; durationMs: number }>
+    timestamp: number
+  }>()
+
+  for (const e of events) {
+    if (!e.prompt_id) continue
+    let turn = turnMap.get(e.prompt_id)
+    if (!turn) {
+      turn = {
+        promptId: e.prompt_id, cost: 0, inputTokens: 0, outputTokens: 0,
+        cacheRead: 0, cacheCreation: 0, latencyMs: 0, model: null, tools: [],
+        timestamp: e.timestamp,
+      }
+      turnMap.set(e.prompt_id, turn)
+    }
+
+    if (e.event_name === 'claude_code.api_request') {
+      turn.cost += e.cost_usd ?? 0
+      turn.inputTokens += e.input_tokens ?? 0
+      turn.outputTokens += e.output_tokens ?? 0
+      turn.cacheRead += e.cache_read_tokens ?? 0
+      turn.cacheCreation += e.cache_creation_tokens ?? 0
+      turn.latencyMs += e.duration_ms ?? 0
+      if (e.model) turn.model = e.model
+    }
+    if (e.event_name === 'claude_code.tool_result' && e.tool_name) {
+      turn.tools.push({
+        name: e.tool_name,
+        success: e.success !== 'false',
+        durationMs: e.duration_ms ?? 0,
+      })
+    }
+    if (e.timestamp < turn.timestamp) turn.timestamp = e.timestamp
+  }
+
+  const turns = Array.from(turnMap.values()).sort((a, b) => a.timestamp - b.timestamp)
+
+  // ── 2. Waste cost: turns with at least one failed tool ─────────────────────
+  let wasteCost = 0
+  let wasteCount = 0
+  for (const t of turns) {
+    const failed = t.tools.filter(tl => !tl.success)
+    if (failed.length > 0) {
+      wasteCost += t.cost
+      wasteCount += failed.length
+    }
+  }
+
+  // ── 3. Cache efficiency curve ──────────────────────────────────────────────
+  const cacheEfficiency: Array<{ timestamp: number; ratio: number; cumulativeCost: number }> = []
+  let cumCost = 0
+  for (const t of turns) {
+    cumCost += t.cost
+    const totalInput = t.inputTokens + t.cacheRead + t.cacheCreation
+    const ratio = totalInput > 0 ? t.cacheRead / totalInput : 0
+    cacheEfficiency.push({ timestamp: t.timestamp, ratio, cumulativeCost: cumCost })
+  }
+
+  // ── 4. Turn efficiency: actions per dollar ─────────────────────────────────
+  const turnEfficiency: Array<{
+    promptId: string; timestamp: number; cost: number
+    toolCount: number; failCount: number; actionsPerDollar: number
+  }> = []
+  for (const t of turns) {
+    const failCount = t.tools.filter(tl => !tl.success).length
+    turnEfficiency.push({
+      promptId: t.promptId,
+      timestamp: t.timestamp,
+      cost: t.cost,
+      toolCount: t.tools.length,
+      failCount,
+      actionsPerDollar: t.cost > 0 ? Math.round(t.tools.length / t.cost) : 0,
+    })
+  }
+
+  // ── 5. Retry detection ─────────────────────────────────────────────────────
+  const retries: Array<{
+    toolName: string; consecutiveAttempts: number
+    totalCost: number; finalSuccess: boolean
+    timestamps: number[]
+  }> = []
+
+  // Flatten all tool calls across turns in order
+  const flatTools: Array<{ name: string; success: boolean; cost: number; timestamp: number }> = []
+  for (const t of turns) {
+    for (const tl of t.tools) {
+      flatTools.push({ name: tl.name, success: tl.success, cost: t.cost / Math.max(t.tools.length, 1), timestamp: t.timestamp })
+    }
+  }
+
+  let i = 0
+  while (i < flatTools.length) {
+    const cur = flatTools[i]
+    if (!cur.success) {
+      // Look ahead for consecutive calls of the same tool
+      let j = i + 1
+      let totalCost = cur.cost
+      const timestamps = [cur.timestamp]
+      while (j < flatTools.length && flatTools[j].name === cur.name) {
+        totalCost += flatTools[j].cost
+        timestamps.push(flatTools[j].timestamp)
+        if (flatTools[j].success) { j++; break }
+        j++
+      }
+      if (j > i + 1) {
+        retries.push({
+          toolName: cur.name,
+          consecutiveAttempts: j - i,
+          totalCost: Math.round(totalCost * 10000) / 10000,
+          finalSuccess: flatTools[j - 1].success,
+          timestamps,
+        })
+      }
+      i = j
+    } else {
+      i++
+    }
+  }
+
+  // ── 6. Per-model cost breakdown (already in otel-summary, but per-turn here)
+  const modelCosts: Record<string, { cost: number; turns: number; tokens: number }> = {}
+  for (const t of turns) {
+    const m = t.model ?? 'unknown'
+    if (!modelCosts[m]) modelCosts[m] = { cost: 0, turns: 0, tokens: 0 }
+    modelCosts[m].cost += t.cost
+    modelCosts[m].turns += 1
+    modelCosts[m].tokens += t.inputTokens + t.outputTokens
+  }
+
+  return {
+    turnCount: turns.length,
+    waste: { cost: Math.round(wasteCost * 10000) / 10000, failedToolCalls: wasteCount },
+    cacheEfficiency,
+    turnEfficiency,
+    retries,
+    modelCosts,
+  }
+}
+
+// GET /sessions/:id/otel-analytics — prompt-turn level analytics
+router.get('/sessions/:id/otel-analytics', async (c) => {
+  const store = c.get('store')
+  const sessionId = decodeURIComponent(c.req.param('id'))
+
+  const otelEvents = await store.getOtelEventsForSession(sessionId, { limit: 5000 })
+  const analytics = buildPromptTurnAnalytics(otelEvents)
+
+  return c.json(analytics)
+})
+
 export default router
