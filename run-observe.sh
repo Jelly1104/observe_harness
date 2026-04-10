@@ -11,7 +11,8 @@
 
 set -euo pipefail
 
-ROOT="/Users/m2-mini/Desktop/eunah/observability-tools/tool-b"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$SCRIPT_DIR"
 SERVER_DIR="$ROOT/app/server"
 CLIENT_DIR="$ROOT/app/client"
 CLIENT_DIST="$CLIENT_DIR/dist"
@@ -46,12 +47,12 @@ start() {
   fi
   echo "▶ Observe 시작 (단일 포트 :$PORT)"
   kill_port
-  echo "  → server (tsx watch) — log: $LOG"
+  echo "  → server (tsx) — log: $LOG"
   (
     cd "$SERVER_DIR"
     AGENTS_OBSERVE_SERVER_PORT="$PORT" \
     AGENTS_OBSERVE_CLIENT_DIST_PATH="$CLIENT_DIST" \
-      nohup npx tsx watch src/index.ts > "$LOG" 2>&1 &
+      nohup npx tsx src/index.ts > "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
   )
   sleep 2
