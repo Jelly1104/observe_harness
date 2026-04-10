@@ -304,10 +304,21 @@ router.post('/events', async (c) => {
 
     broadcastToSession(parsed.sessionId, { type: 'event', data: event })
 
+    // Detect slug change and broadcast to clients
+    if (parsed.slug) {
+      const freshSession = await store.getSessionById(parsed.sessionId)
+      if (freshSession && freshSession.slug !== parsed.slug) {
+        broadcastToAll({
+          type: 'session_update',
+          data: { id: parsed.sessionId, slug: parsed.slug } as any,
+        })
+      }
+    }
+
     // Build response -- request local data if the server is missing info
     const requests: Array<{ cmd: string; args: Record<string, unknown>; callback: string }> = []
 
-    // Request session slug if missing
+    // Request session slug if missing or changed
     if (parsed.raw.transcript_path) {
       const session = await store.getSessionById(parsed.sessionId)
       if (session && !session.slug) {
