@@ -76,6 +76,9 @@ export function useWebSocket(sessionId: string | null) {
       if (sid) {
         queryClient.invalidateQueries({ queryKey: ['otel-summary', sid] })
       }
+    } else if (msg.type === 'metric_alert') {
+      // Dispatch custom event for toast notification component
+      window.dispatchEvent(new CustomEvent('metric-alert', { detail: msg.data }))
     }
   }, [queryClient])
 

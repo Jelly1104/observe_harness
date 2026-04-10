@@ -134,10 +134,12 @@ export interface FlowEnrichment {
 
 export interface AlertEvent {
   ruleId: string
+  ruleName: string
+  severity: 'warning' | 'critical'
   sessionId: string
   currentValue: number
   threshold: number
-  message: string
+  timestamp: number
 }
 
 export type WSMessage =

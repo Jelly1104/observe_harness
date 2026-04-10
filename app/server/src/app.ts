@@ -18,6 +18,7 @@ import hooksConfigRouter from './routes/hooks-config'
 import skillsConfigRouter from './routes/skills-config'
 import otelIngestRouter from './routes/otel-ingest'
 import metricsRouter from './routes/metrics'
+import evalRouter from './routes/eval'
 import { MetricsAggregator } from './services/metrics-aggregator'
 
 type Env = {
@@ -58,6 +59,7 @@ export function createApp(
   app.route('/api', hooksConfigRouter)
   app.route('/api', skillsConfigRouter)
   app.route('/api', metricsRouter)
+  app.route('/api', evalRouter)
 
   // OTLP ingest — registered at root (not /api) to match standard OTLP paths
   app.route('', otelIngestRouter)

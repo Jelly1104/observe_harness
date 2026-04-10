@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 
 export function MainPanel() {
   const { selectedProjectId, selectedSessionId, activeTab, setActiveTab } = useUIStore()
-  const hasOtel = useHasOtelData(selectedSessionId ?? undefined)
+  const hasOtel = useHasOtelData(selectedSessionId)
 
   if (!selectedProjectId) {
     return <HomePage />

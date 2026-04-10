@@ -115,8 +115,8 @@ router.post('/v1/logs', async (c) => {
         const id = await store.insertOtelEvent(otelEvent)
         inserted.push(id)
 
-        // Write-time aggregation: update session summary
-        await aggregator.onOtelEventInserted({ id, ...otelEvent })
+        // Write-time aggregation: update session summary & check alert thresholds
+        const alerts = await aggregator.onOtelEventInserted({ id, ...otelEvent })
 
         if (sessionId) {
           broadcastToSession(sessionId, {
@@ -135,6 +135,14 @@ router.post('/v1/logs', async (c) => {
               cache_read_tokens: eventAttrs['cache_read_tokens'] ?? null,
             },
           })
+
+          // Broadcast cost anomaly alerts
+          for (const alert of alerts) {
+            broadcastToSession(sessionId, {
+              type: 'metric_alert',
+              data: alert,
+            })
+          }
         }
       }
     }

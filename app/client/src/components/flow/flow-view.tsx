@@ -8,14 +8,16 @@ import { buildFlowGraph, type FlowEdge, type FlowGraph, type FlowNode, type Node
 import { FlowLane } from './flow-lane'
 import { KIND_THEME } from './flow-node'
 import { FlowDensityContext, FlowHooksContext, FlowForkedSkillsContext, type FlowDensity } from './flow-density'
+import { ReplayControls } from '@/components/replay/replay-controls'
 import { useOtelSummary } from '@/hooks/use-otel'
 import { api } from '@/lib/api-client'
 import { User,
   FileText, GitBranch, Filter, X, BookOpen, Zap, Bot, Pencil, FilePen,
   Search, SearchCode, Globe, MessageSquare, CircleStop, AlertTriangle, Wrench,
   Sparkles, Lock, ChevronRight, ArrowDownToLine, Clock, Copy, Check,
-  ExternalLink, Rows3, Rows2, AlignJustify, DollarSign,
+  ExternalLink, Rows3, Rows2, AlignJustify, DollarSign, ListTree,
 } from 'lucide-react'
+import { TreeView } from './tree-view'
 import { cn } from '@/lib/utils'
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -629,7 +631,7 @@ function DocSidebar({ lanes, filterDocs, filterAgents, onToggleDoc }: {
 // ── Main FlowView ────────────────────────────────────────────────────
 
 export function FlowView() {
-  const { selectedProjectId, selectedSessionId, setScrollToEventId, scrollToFlowTimestamp, setScrollToFlowTimestamp } = useUIStore()
+  const { selectedProjectId, selectedSessionId, setScrollToEventId, scrollToFlowTimestamp, setScrollToFlowTimestamp, flowViewMode, setFlowViewMode, replayState } = useUIStore()
   const { data: sessions } = useSessions(selectedProjectId)
   const effectiveSessionId = selectedSessionId || sessions?.[0]?.id || null
   const { data: events } = useEvents(effectiveSessionId)
@@ -794,6 +796,32 @@ export function FlowView() {
 
     setScrollToFlowTimestamp(null)
   }, [scrollToFlowTimestamp, graph, setScrollToFlowTimestamp])
+
+  // Replay auto-scroll: scroll to the latest visible node during playback
+  const lastReplayScrollRef = useRef<number>(0)
+  useEffect(() => {
+    if (!replayState.isPlaying || replayState.currentTime == null || !graph || !contentRef.current) return
+    // Throttle scrolling to every 500ms to avoid jank
+    const now = Date.now()
+    if (now - lastReplayScrollRef.current < 500) return
+    lastReplayScrollRef.current = now
+
+    // Find the last node with timestamp <= currentTime
+    let bestNode: { id: number; ts: number } | null = null
+    for (const lane of graph.lanes) {
+      for (const node of lane.nodes) {
+        if (node.timestamp <= replayState.currentTime! && (!bestNode || node.timestamp > bestNode.ts)) {
+          bestNode = { id: node.id, ts: node.timestamp }
+        }
+      }
+    }
+    if (bestNode) {
+      const el = contentRef.current.querySelector(`[data-node-id="${bestNode.id}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [replayState.isPlaying, replayState.currentTime, graph])
 
   const handleToggleDoc = useCallback((doc: string) => {
     setFilterDocs(prev => {
@@ -966,6 +994,24 @@ export function FlowView() {
             Follow
           </button>
 
+          {/* View mode toggle (Lane vs Tree) */}
+          <div className="flex items-center border border-border rounded-md overflow-hidden">
+            <button
+              className={cn('px-1.5 py-1 transition-colors', flowViewMode === 'lane' ? 'bg-primary/15 text-primary' : 'text-muted-foreground/50 hover:text-foreground')}
+              onClick={() => setFlowViewMode('lane')}
+              title="Swim Lane"
+            >
+              <GitBranch className="h-3.5 w-3.5" />
+            </button>
+            <button
+              className={cn('px-1.5 py-1 transition-colors', flowViewMode === 'tree' ? 'bg-primary/15 text-primary' : 'text-muted-foreground/50 hover:text-foreground')}
+              onClick={() => setFlowViewMode('tree')}
+              title="Tree View"
+            >
+              <ListTree className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
           {/* Density toggle */}
           <div className="flex items-center border border-border rounded-md overflow-hidden">
             {([
@@ -1096,32 +1142,41 @@ export function FlowView() {
         {/* Left: Doc sidebar */}
         <DocSidebar lanes={graph.lanes} filterDocs={filterDocs} filterAgents={filterAgents} onToggleDoc={handleToggleDoc} />
 
-        {/* Center: Lanes — scroll container wraps a content div that
-             holds both lanes and the SVG edges in the same coordinate space */}
-        <div ref={containerRef} className="flex-1 overflow-auto bg-background">
-          <div ref={contentRef} className="relative inline-flex min-h-full">
-            {filteredLanes.map((lane, idx) => (
-              <div key={lane.agentId} className="flex shrink-0" data-lane-id={lane.agentId}>
-                {idx > 0 && (
-                  <div className="w-px bg-border/20 shrink-0" />
-                )}
-                <FlowLane
-                  lane={lane}
-                  color={LANE_PALETTE[idx % LANE_PALETTE.length].text}
-                  accentHex={LANE_PALETTE[idx % LANE_PALETTE.length].hex}
-                  selectedNodeId={selectedNodeId}
-                  onNodeClick={handleNodeClick}
-                />
-              </div>
-            ))}
+        {/* Center: Lanes or Tree view */}
+        {flowViewMode === 'tree' ? (
+          <TreeView
+            graph={graph}
+            agentLookup={agentLookup}
+            selectedNodeId={selectedNodeId}
+            onNodeClick={handleNodeClick}
+          />
+        ) : (
+          <div ref={containerRef} className="flex-1 overflow-auto bg-background">
+            <div ref={contentRef} className="relative inline-flex min-h-full">
+              {filteredLanes.map((lane, idx) => (
+                <div key={lane.agentId} className="flex shrink-0" data-lane-id={lane.agentId}>
+                  {idx > 0 && (
+                    <div className="w-px bg-border/20 shrink-0" />
+                  )}
+                  <FlowLane
+                    lane={lane}
+                    color={LANE_PALETTE[idx % LANE_PALETTE.length].text}
+                    accentHex={LANE_PALETTE[idx % LANE_PALETTE.length].hex}
+                    selectedNodeId={selectedNodeId}
+                    onNodeClick={handleNodeClick}
+                    replayCurrentTime={replayState.currentTime}
+                  />
+                </div>
+              ))}
 
-            <CrossLaneEdges
-              edges={graph.edges}
-              contentRef={contentRef}
-              visibleAgentIds={new Set(filteredLanes.map(l => l.agentId))}
-            />
+              <CrossLaneEdges
+                edges={graph.edges}
+                contentRef={contentRef}
+                visibleAgentIds={new Set(filteredLanes.map(l => l.agentId))}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Right: Detail panel */}
         {selectedNode && (
@@ -1136,6 +1191,11 @@ export function FlowView() {
       </FlowDensityContext.Provider>
       </FlowForkedSkillsContext.Provider>
       </FlowHooksContext.Provider>
+
+      {/* Session Replay controls */}
+      {graph.firstTimestamp && graph.lastTimestamp && (
+        <ReplayControls startTime={graph.firstTimestamp} endTime={graph.lastTimestamp} />
+      )}
     </div>
   )
 }

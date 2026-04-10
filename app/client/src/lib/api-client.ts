@@ -82,6 +82,8 @@ export const api = {
       event: string; matcher?: string; command: string; line: number; source: string
     }> }>(`/hooks-config${params}`)
   },
+  getSessionsCompare: (projectId: number) =>
+    fetchJson<CrossSessionData>(`/analytics/summary?project_id=${projectId}`),
   getOtelSummary: (sessionId: string) =>
     fetchJson<OtelSummary>(`/sessions/${encodeURIComponent(sessionId)}/otel-summary`),
   getOtelAnalytics: (sessionId: string) =>
@@ -98,7 +100,27 @@ export const api = {
       `/sessions/${encodeURIComponent(sessionId)}/otel-events${qs ? `?${qs}` : ''}`
     )
   },
+  getSessionScores: (sessionId: string) =>
+    fetchJson<SessionScoreData[]>(`/eval/scores?session_id=${encodeURIComponent(sessionId)}`),
+  postSessionScore: (data: { session_id: string; scorer_type: 'human'; score: number; comment?: string }) =>
+    fetchJson<{ id: number; score: number }>('/eval/scores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  triggerAutoScore: (sessionId: string) =>
+    fetchJson<{ id: number; score: number; breakdown: Record<string, number> }>(`/eval/auto-score/${encodeURIComponent(sessionId)}`, { method: 'POST' }),
 };
+
+export interface SessionScoreData {
+  id: number
+  session_id: string
+  scorer_type: 'code' | 'human' | 'llm'
+  score: number
+  comment: string | null
+  details: string | null
+  created_at: number
+}
 
 // OTel types (mirrored from server)
 export interface OtelSummary {
@@ -136,6 +158,35 @@ export interface OtelVulnerabilities {
     timestamp: number
     details: Record<string, unknown>
   }>
+}
+
+export interface CrossSessionSummary {
+  session_id: string
+  project_id: number | null
+  total_cost_usd: number
+  total_tokens: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  api_request_count: number
+  tool_use_count: number
+  tool_error_count: number
+  duration_s: number
+  model_breakdown: string
+  started_at: number | null
+  stopped_at: number | null
+  updated_at: number
+  event_count?: number
+}
+
+export interface CrossSessionData {
+  sessionCount: number
+  totalCost: number
+  totalTokens: number
+  totalApiRequests: number
+  totalToolUses: number
+  avgCostPerSession: number
+  sessions: CrossSessionSummary[]
 }
 
 export interface OtelEvent {

@@ -121,22 +121,60 @@ router.get('/traces/:traceId/spans', async (c) => {
 })
 
 // GET /analytics/summary — cross-session analytics
+// Joins sessions table with session_summaries to include ALL sessions,
+// even those without OTel data (they get zero-filled metrics).
 router.get('/analytics/summary', async (c) => {
   const store = c.get('store')
   const projectId = c.req.query('project_id') ? parseInt(c.req.query('project_id')!) : undefined
   const from = c.req.query('from') ? parseInt(c.req.query('from')!) : undefined
   const to = c.req.query('to') ? parseInt(c.req.query('to')!) : undefined
 
-  const summaries = await store.getSessionSummaries(projectId, from, to)
+  // Get all sessions for the project (with event counts)
+  const allSessions: Array<{
+    id: string; project_id: number; started_at: number; stopped_at: number | null
+    event_count: number; agent_count: number
+  }> = projectId
+    ? await store.getSessionsForProject(projectId)
+    : []
+
+  // Get OTel summaries — session_summaries.project_id can be NULL,
+  // so also fetch by session IDs to match sessions in this project.
+  const sessionIds = new Set(allSessions.map(s => s.id))
+  const allSummaries = await store.getSessionSummaries(undefined, from, to)
+  const summaries = allSummaries.filter(s => sessionIds.has(s.session_id))
+  const summaryMap = new Map(summaries.map(s => [s.session_id, s]))
+
+  // Merge: all sessions get a summary row (zero-filled if no OTel data)
+  const merged = allSessions.map(sess => {
+    const otel = summaryMap.get(sess.id)
+    return {
+      session_id: sess.id,
+      project_id: sess.project_id ?? projectId ?? null,
+      total_cost_usd: otel?.total_cost_usd ?? 0,
+      total_tokens: otel?.total_tokens ?? 0,
+      input_tokens: otel?.input_tokens ?? 0,
+      output_tokens: otel?.output_tokens ?? 0,
+      cache_read_tokens: otel?.cache_read_tokens ?? 0,
+      api_request_count: otel?.api_request_count ?? 0,
+      tool_use_count: otel?.tool_use_count ?? 0,
+      tool_error_count: otel?.tool_error_count ?? 0,
+      duration_s: otel?.duration_s ?? ((sess.stopped_at && sess.started_at) ? (sess.stopped_at - sess.started_at) / 1000 : 0),
+      model_breakdown: otel?.model_breakdown ?? '{}',
+      started_at: otel?.started_at ?? sess.started_at,
+      stopped_at: otel?.stopped_at ?? sess.stopped_at,
+      updated_at: otel?.updated_at ?? sess.started_at,
+      event_count: (sess as any).event_count ?? 0,
+    }
+  })
 
   // Aggregate across sessions
   let totalCost = 0
   let totalTokens = 0
   let totalApiRequests = 0
   let totalToolUses = 0
-  let sessionCount = summaries.length
+  const sessionCount = merged.length
 
-  for (const s of summaries) {
+  for (const s of merged) {
     totalCost += s.total_cost_usd
     totalTokens += s.total_tokens
     totalApiRequests += s.api_request_count
@@ -150,7 +188,7 @@ router.get('/analytics/summary', async (c) => {
     totalApiRequests,
     totalToolUses,
     avgCostPerSession: sessionCount > 0 ? Math.round((totalCost / sessionCount) * 1000) / 1000 : 0,
-    sessions: summaries,
+    sessions: merged,
   })
 })
 

@@ -64,10 +64,22 @@ export interface RecentSession {
   lastActivity: number
 }
 
+export interface MetricAlert {
+  ruleId: string
+  ruleName: string
+  severity: 'warning' | 'critical'
+  sessionId: string
+  currentValue: number
+  threshold: number
+  timestamp: number
+}
+
 export type WSMessage =
   | { type: 'event'; data: ParsedEvent }
   | { type: 'session_update'; data: Session }
   | { type: 'project_update'; data: { id: number; name: string } }
+  | { type: 'otel_event'; data: Record<string, unknown> }
+  | { type: 'metric_alert'; data: MetricAlert }
 
 export type WSClientMessage =
   | { type: 'subscribe'; sessionId: string }

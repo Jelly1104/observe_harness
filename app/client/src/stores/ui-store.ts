@@ -94,9 +94,27 @@ interface UIState {
   scrollToFlowTimestamp: number | null
   setScrollToFlowTimestamp: (ts: number | null) => void
 
+  // Flow view mode (swim-lane vs tree)
+  flowViewMode: 'lane' | 'tree'
+  setFlowViewMode: (mode: 'lane' | 'tree') => void
+
   // Icon customization reactivity
   iconCustomizationVersion: number
   bumpIconCustomizationVersion: () => void
+
+  // Session Replay
+  replayState: {
+    isPlaying: boolean
+    speed: 1 | 2 | 4 | 8
+    currentTime: number | null  // current replay timestamp (null = not replaying)
+    startTime: number | null
+    endTime: number | null
+  }
+  setReplayPlaying: (playing: boolean) => void
+  setReplaySpeed: (speed: 1 | 2 | 4 | 8) => void
+  setReplayCurrentTime: (time: number | null) => void
+  initReplay: (startTime: number, endTime: number) => void
+  stopReplay: () => void
 }
 
 const { projectSlug: initialProjectSlug, sessionId: initialSessionId } = parseHash()
@@ -232,8 +250,36 @@ export const useUIStore = create<UIState>((set, get) => ({
   scrollToFlowTimestamp: null,
   setScrollToFlowTimestamp: (ts) => set({ scrollToFlowTimestamp: ts }),
 
+  flowViewMode: 'lane',
+  setFlowViewMode: (mode) => set({ flowViewMode: mode }),
+
   iconCustomizationVersion: 0,
   bumpIconCustomizationVersion: () => set((s) => ({ iconCustomizationVersion: s.iconCustomizationVersion + 1 })),
+
+  // Session Replay
+  replayState: {
+    isPlaying: false,
+    speed: 1,
+    currentTime: null,
+    startTime: null,
+    endTime: null,
+  },
+  setReplayPlaying: (playing) => set((s) => ({
+    replayState: { ...s.replayState, isPlaying: playing },
+  })),
+  setReplaySpeed: (speed) => set((s) => ({
+    replayState: { ...s.replayState, speed },
+  })),
+  setReplayCurrentTime: (time) => set((s) => ({
+    replayState: { ...s.replayState, currentTime: time },
+  })),
+  initReplay: (startTime, endTime) => set({
+    replayState: { isPlaying: false, speed: 1, currentTime: startTime, startTime, endTime },
+    autoFollow: false,
+  }),
+  stopReplay: () => set({
+    replayState: { isPlaying: false, speed: 1, currentTime: null, startTime: null, endTime: null },
+  }),
 }))
 
 if (typeof window !== 'undefined') {

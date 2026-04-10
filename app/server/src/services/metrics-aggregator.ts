@@ -5,6 +5,33 @@
 
 import type { EventStore, OtelMetric, OtelEvent, SessionSummary } from '../storage/types'
 
+// ── Cost Anomaly Alert Types ────────────────────────────────────────────────
+
+export interface AlertRule {
+  id: string
+  name: string
+  metric: 'total_cost_usd' | 'total_tokens' | 'api_request_count'
+  threshold: number
+  severity: 'warning' | 'critical'
+}
+
+export interface Alert {
+  ruleId: string
+  ruleName: string
+  severity: 'warning' | 'critical'
+  sessionId: string
+  currentValue: number
+  threshold: number
+  timestamp: number
+}
+
+const DEFAULT_ALERT_RULES: AlertRule[] = [
+  { id: 'cost_warn', name: 'Session cost exceeds $0.50', metric: 'total_cost_usd', threshold: 0.5, severity: 'warning' },
+  { id: 'cost_crit', name: 'Session cost exceeds $2.00', metric: 'total_cost_usd', threshold: 2.0, severity: 'critical' },
+  { id: 'token_warn', name: 'Token usage exceeds 100K', metric: 'total_tokens', threshold: 100000, severity: 'warning' },
+  { id: 'token_crit', name: 'Token usage exceeds 500K', metric: 'total_tokens', threshold: 500000, severity: 'critical' },
+]
+
 const BUCKET_SIZE_MS = 60_000 // 1 minute
 
 function toBucket(timestamp: number): number {
@@ -12,6 +39,9 @@ function toBucket(timestamp: number): number {
 }
 
 export class MetricsAggregator {
+  // Track fired alerts per session to avoid duplicate notifications ("sessionId:ruleId")
+  private firedAlerts = new Set<string>()
+
   constructor(private readonly store: EventStore) {}
 
   /** Called after every OTel metric INSERT */
@@ -36,15 +66,22 @@ export class MetricsAggregator {
   }
 
   /** Called after every OTel event INSERT — updates session_summaries */
-  async onOtelEventInserted(e: OtelEvent, projectId?: number): Promise<void> {
-    if (!e.session_id) return
+  async onOtelEventInserted(e: OtelEvent, projectId?: number): Promise<Alert[]> {
+    if (!e.session_id) return []
 
     const existing = await this.store.getSessionSummary(e.session_id)
     const now = Date.now()
 
+    // Resolve project_id: use explicit param, existing record, or look up from sessions table
+    let resolvedProjectId = projectId ?? existing?.project_id ?? null
+    if (resolvedProjectId == null) {
+      const session = await this.store.getSessionById(e.session_id)
+      resolvedProjectId = session?.project_id ?? null
+    }
+
     const summary: SessionSummary = existing ?? {
       session_id: e.session_id,
-      project_id: projectId ?? null,
+      project_id: resolvedProjectId,
       total_cost_usd: 0,
       total_tokens: 0,
       input_tokens: 0,
@@ -92,6 +129,32 @@ export class MetricsAggregator {
 
     summary.updated_at = now
     await this.store.upsertSessionSummary(summary)
+
+    // Check alert thresholds and return any newly triggered alerts
+    return this.checkAlerts(summary)
+  }
+
+  /** Evaluate alert rules against session summary, firing each rule at most once per session */
+  checkAlerts(summary: SessionSummary): Alert[] {
+    const alerts: Alert[] = []
+    for (const rule of DEFAULT_ALERT_RULES) {
+      const key = `${summary.session_id}:${rule.id}`
+      if (this.firedAlerts.has(key)) continue
+      const value = summary[rule.metric]
+      if (value >= rule.threshold) {
+        this.firedAlerts.add(key)
+        alerts.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          severity: rule.severity,
+          sessionId: summary.session_id,
+          currentValue: value,
+          threshold: rule.threshold,
+          timestamp: Date.now(),
+        })
+      }
+    }
+    return alerts
   }
 
   /** Compute real-time rates for a session (last 60s window) */

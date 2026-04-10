@@ -7,6 +7,7 @@ import { eventMatchesFilters } from '@/config/filters'
 import { format } from 'timeago.js'
 import { buildAgentColorMap } from '@/lib/agent-utils'
 import type { Agent, ParsedEvent } from '@/types'
+import { cn } from '@/lib/utils'
 
 export function EventStream() {
   const {
@@ -19,6 +20,7 @@ export function EventStream() {
     expandAllCounter,
     expandAllEvents,
     selectedEventId,
+    replayState,
   } = useUIStore()
 
   // Defer filter values so the UI stays responsive during filter changes
@@ -172,6 +174,19 @@ export function EventStream() {
     }
   }, [expandAllCounter])
 
+  // Auto-scroll to the last visible event during replay
+  useEffect(() => {
+    if (replayState.currentTime == null || !scrollRef.current) return
+    // Find the last event that is not in the future
+    const lastVisible = filteredEvents.filter(e => e.timestamp <= replayState.currentTime!).pop()
+    if (lastVisible) {
+      const el = eventRowRefs.current.get(lastVisible.id)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }
+  }, [replayState.currentTime, filteredEvents])
+
   // Auto-scroll to the selected event when filteredEvents change (i.e. filters change)
   const prevFilteredRef = useRef(filteredEvents)
   useEffect(() => {
@@ -225,17 +240,24 @@ export function EventStream() {
       </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="divide-y divide-border/50">
-          {filteredEvents.map((event) => (
-            <EventRow
-              key={event.id}
-              event={event}
-              agentMap={agentMap}
-              agentColorMap={agentColorMap}
-              showAgentLabel={showAgentLabel}
-              spawnInfo={spawnInfo.get(event.agentId)}
-              onRowRef={setEventRowRef}
-            />
-          ))}
+          {filteredEvents.map((event) => {
+            const isFuture = replayState.currentTime != null && event.timestamp > replayState.currentTime
+            return (
+              <div
+                key={event.id}
+                className={cn('transition-opacity', isFuture && 'opacity-20 pointer-events-none')}
+              >
+                <EventRow
+                  event={event}
+                  agentMap={agentMap}
+                  agentColorMap={agentColorMap}
+                  showAgentLabel={showAgentLabel}
+                  spawnInfo={spawnInfo.get(event.agentId)}
+                  onRowRef={setEventRowRef}
+                />
+              </div>
+            )
+          })}
           <div className="h-8" />
         </div>
       </div>

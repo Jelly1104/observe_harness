@@ -6,6 +6,7 @@ import {
   DollarSign, Zap, Clock, Database, TrendingUp, AlertCircle,
   AlertTriangle, RotateCcw, Shield, ShieldAlert, ShieldCheck, Repeat, Ban, TrendingDown,
 } from 'lucide-react'
+import { ScoreCard } from '@/components/eval/score-card'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -524,6 +525,9 @@ export function MetricsView() {
 
         {/* Vulnerability patterns */}
         {vulnerabilities && <VulnerabilityPanel data={vulnerabilities} onNavigateToFlow={handleNavigateToFlow} />}
+
+        {/* Session evaluation */}
+        {effectiveSessionId && <ScoreCard sessionId={effectiveSessionId} />}
 
         {/* Per-request table */}
         <RequestTable events={otelEvents} />

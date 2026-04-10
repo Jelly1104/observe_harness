@@ -1,7 +1,7 @@
 // app/server/src/storage/sqlite-adapter.ts
 
 import Database from 'better-sqlite3'
-import type { EventStore, InsertEventParams, EventFilters, StoredEvent, OtelEvent, OtelMetric, OtelSpan, OtelSummary, MetricRollup, SessionSummary } from './types'
+import type { EventStore, InsertEventParams, EventFilters, StoredEvent, OtelEvent, OtelMetric, OtelSpan, OtelSummary, MetricRollup, SessionSummary, SessionScore } from './types'
 
 export class SqliteAdapter implements EventStore {
   private db: Database.Database
@@ -181,6 +181,20 @@ export class SqliteAdapter implements EventStore {
         updated_at        INTEGER NOT NULL
       )
     `)
+
+    // ── Eval scoring table ─────────────────────────────────────────────────
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS session_scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        scorer_type TEXT NOT NULL CHECK(scorer_type IN ('code', 'human', 'llm')),
+        score REAL NOT NULL,
+        comment TEXT,
+        details TEXT,
+        created_at INTEGER NOT NULL
+      )
+    `)
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_scores_session ON session_scores(session_id)')
 
     // OTel indexes
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_events_session ON otel_events(session_id, timestamp)')
@@ -506,6 +520,7 @@ export class SqliteAdapter implements EventStore {
     this.db.prepare('DELETE FROM otel_spans WHERE session_id = ?').run(sessionId)
     this.db.prepare('DELETE FROM metric_rollups_1m WHERE session_id = ?').run(sessionId)
     this.db.prepare('DELETE FROM session_summaries WHERE session_id = ?').run(sessionId)
+    this.db.prepare('DELETE FROM session_scores WHERE session_id = ?').run(sessionId)
     this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
   }
 
@@ -522,6 +537,7 @@ export class SqliteAdapter implements EventStore {
   async clearAllData(): Promise<void> {
     this.db.prepare('DELETE FROM metric_rollups_1m WHERE 1=1').run()
     this.db.prepare('DELETE FROM session_summaries WHERE 1=1').run()
+    this.db.prepare('DELETE FROM session_scores WHERE 1=1').run()
     this.db.prepare('DELETE FROM otel_spans WHERE 1=1').run()
     this.db.prepare('DELETE FROM otel_metrics WHERE 1=1').run()
     this.db.prepare('DELETE FROM otel_events WHERE 1=1').run()
@@ -820,5 +836,24 @@ export class SqliteAdapter implements EventStore {
     return this.db.prepare(
       'SELECT * FROM otel_spans WHERE trace_id = ? ORDER BY start_time ASC'
     ).all(traceId) as OtelSpan[]
+  }
+
+  // ── Eval scoring methods ─────────────────────────────────────────────────
+
+  async insertSessionScore(params: Omit<SessionScore, 'id'>): Promise<number> {
+    const stmt = this.db.prepare(`
+      INSERT INTO session_scores (session_id, scorer_type, score, comment, details, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `)
+    const result = stmt.run(params.session_id, params.scorer_type, params.score, params.comment, params.details, params.created_at)
+    return Number(result.lastInsertRowid)
+  }
+
+  async getSessionScores(sessionId: string): Promise<SessionScore[]> {
+    return this.db.prepare('SELECT * FROM session_scores WHERE session_id = ? ORDER BY created_at DESC').all(sessionId) as SessionScore[]
+  }
+
+  async getLatestScore(sessionId: string, scorerType: string): Promise<SessionScore | null> {
+    return (this.db.prepare('SELECT * FROM session_scores WHERE session_id = ? AND scorer_type = ? ORDER BY created_at DESC LIMIT 1').get(sessionId, scorerType) as SessionScore | undefined) ?? null
   }
 }

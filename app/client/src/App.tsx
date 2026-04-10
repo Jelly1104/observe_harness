@@ -1,6 +1,7 @@
 import { ThemeProvider } from '@/components/theme-provider'
 import { Sidebar } from '@/components/sidebar/sidebar'
 import { MainPanel } from '@/components/main-panel/main-panel'
+import { ToastAlerts } from '@/components/alerts/toast-alerts'
 import { useWebSocket } from '@/hooks/use-websocket'
 import { useRouteSync } from '@/hooks/use-route-sync'
 import { useUIStore } from '@/stores/ui-store'
@@ -16,6 +17,7 @@ export function App() {
         <Sidebar connected={connected} />
         <MainPanel />
       </div>
+      <ToastAlerts />
     </ThemeProvider>
   )
 }

@@ -145,6 +145,16 @@ export interface SessionDashboard {
   models: Record<string, { cost: number; requests: number }>
 }
 
+export interface SessionScore {
+  id?: number
+  session_id: string
+  scorer_type: 'code' | 'human' | 'llm'
+  score: number          // 0.0 - 5.0
+  comment: string | null
+  details: string | null // JSON for auto-scorer breakdown
+  created_at: number
+}
+
 export interface EventStore {
   createProject(slug: string, name: string, transcriptPath: string | null): Promise<number>
   getProjectBySlug(slug: string): Promise<any | null>
@@ -203,4 +213,9 @@ export interface EventStore {
   getOtelMetricsForSession(sessionId: string, filters?: { metricName?: string; limit?: number }): Promise<OtelMetric[]>
   getOtelSpansForSession(sessionId: string, limit?: number): Promise<OtelSpan[]>
   getOtelSpansForTrace(traceId: string): Promise<OtelSpan[]>
+
+  // Eval scoring
+  insertSessionScore(params: Omit<SessionScore, 'id'>): Promise<number>
+  getSessionScores(sessionId: string): Promise<SessionScore[]>
+  getLatestScore(sessionId: string, scorerType: string): Promise<SessionScore | null>
 }

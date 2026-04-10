@@ -210,10 +210,11 @@ interface FlowLaneProps {
   accentHex: string
   selectedNodeId: number | null
   onNodeClick: (id: number) => void
+  replayCurrentTime?: number | null
 }
 
 export const FlowLane = memo(function FlowLane({
-  lane, color, accentHex, selectedNodeId, onNodeClick,
+  lane, color, accentHex, selectedNodeId, onNodeClick, replayCurrentTime,
 }: FlowLaneProps) {
   const entries = useMemo(() => groupConsecutiveNodes(lane.nodes), [lane.nodes])
   const density = useFlowDensity()
@@ -287,25 +288,30 @@ export const FlowLane = memo(function FlowLane({
       <div className="flex-1 flex flex-col items-center px-4 py-4 min-w-0 overflow-x-hidden">
         {entries.map((entry, idx) => {
           const isLast = idx === entries.length - 1
+          // During replay, dim nodes that are in the future
+          const entryTimestamp = entry.type === 'group' ? entry.nodes[0].timestamp : entry.node.timestamp
+          const isFuture = replayCurrentTime != null && entryTimestamp > replayCurrentTime
           if (entry.type === 'group') {
             return (
-              <CollapsedGroupHeader
-                key={entry.key}
-                entry={entry}
-                isLast={isLast}
-                selectedNodeId={selectedNodeId}
-                onNodeClick={onNodeClick}
-              />
+              <div key={entry.key} className={cn('transition-opacity', isFuture && 'opacity-20 pointer-events-none')}>
+                <CollapsedGroupHeader
+                  entry={entry}
+                  isLast={isLast}
+                  selectedNodeId={selectedNodeId}
+                  onNodeClick={onNodeClick}
+                />
+              </div>
             )
           }
           return (
-            <FlowNodeComponent
-              key={entry.node.id}
-              node={entry.node}
-              isSelected={selectedNodeId === entry.node.id}
-              isLast={isLast}
-              onClick={onNodeClick}
-            />
+            <div key={entry.node.id} className={cn('transition-opacity', isFuture && 'opacity-20 pointer-events-none')}>
+              <FlowNodeComponent
+                node={entry.node}
+                isSelected={selectedNodeId === entry.node.id}
+                isLast={isLast}
+                onClick={onNodeClick}
+              />
+            </div>
           )
         })}
 
