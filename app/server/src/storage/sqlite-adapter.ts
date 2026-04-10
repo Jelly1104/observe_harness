@@ -1,7 +1,7 @@
 // app/server/src/storage/sqlite-adapter.ts
 
 import Database from 'better-sqlite3'
-import type { EventStore, InsertEventParams, EventFilters, StoredEvent, OtelEvent, OtelMetric, OtelSpan, OtelSummary } from './types'
+import type { EventStore, InsertEventParams, EventFilters, StoredEvent, OtelEvent, OtelMetric, OtelSpan, OtelSummary, MetricRollup, SessionSummary } from './types'
 
 export class SqliteAdapter implements EventStore {
   private db: Database.Database
@@ -141,6 +141,46 @@ export class SqliteAdapter implements EventStore {
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id)')
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)')
+
+    // ── Metrics aggregation tables (v2) ───────────────────────────────────
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS metric_rollups_1m (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id      TEXT,
+        metric_name     TEXT NOT NULL,
+        bucket          INTEGER NOT NULL,
+        agg_sum         REAL NOT NULL DEFAULT 0,
+        agg_count       INTEGER NOT NULL DEFAULT 0,
+        agg_min         REAL,
+        agg_max         REAL,
+        attributes_key  TEXT NOT NULL DEFAULT '',
+        updated_at      INTEGER NOT NULL
+      )
+    `)
+    this.db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_rollup_1m_key
+        ON metric_rollups_1m(session_id, metric_name, bucket, attributes_key)
+    `)
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS session_summaries (
+        session_id        TEXT PRIMARY KEY,
+        project_id        INTEGER,
+        total_cost_usd    REAL DEFAULT 0,
+        total_tokens      INTEGER DEFAULT 0,
+        input_tokens      INTEGER DEFAULT 0,
+        output_tokens     INTEGER DEFAULT 0,
+        cache_read_tokens INTEGER DEFAULT 0,
+        api_request_count INTEGER DEFAULT 0,
+        tool_use_count    INTEGER DEFAULT 0,
+        tool_error_count  INTEGER DEFAULT 0,
+        duration_s        REAL DEFAULT 0,
+        model_breakdown   TEXT DEFAULT '{}',
+        started_at        INTEGER,
+        stopped_at        INTEGER,
+        updated_at        INTEGER NOT NULL
+      )
+    `)
 
     // OTel indexes
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_otel_events_session ON otel_events(session_id, timestamp)')
@@ -461,23 +501,30 @@ export class SqliteAdapter implements EventStore {
   async deleteSession(sessionId: string): Promise<void> {
     this.db.prepare('DELETE FROM events WHERE session_id = ?').run(sessionId)
     this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(sessionId)
+    this.db.prepare('DELETE FROM otel_events WHERE session_id = ?').run(sessionId)
+    this.db.prepare('DELETE FROM otel_metrics WHERE session_id = ?').run(sessionId)
+    this.db.prepare('DELETE FROM otel_spans WHERE session_id = ?').run(sessionId)
+    this.db.prepare('DELETE FROM metric_rollups_1m WHERE session_id = ?').run(sessionId)
+    this.db.prepare('DELETE FROM session_summaries WHERE session_id = ?').run(sessionId)
     this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
   }
 
   async deleteProject(projectId: number): Promise<void> {
-    // Get all session IDs for this project
     const sessions = this.db
       .prepare('SELECT id FROM sessions WHERE project_id = ?')
       .all(projectId) as { id: string }[]
     for (const session of sessions) {
-      this.db.prepare('DELETE FROM events WHERE session_id = ?').run(session.id)
-      this.db.prepare('DELETE FROM agents WHERE session_id = ?').run(session.id)
+      await this.deleteSession(session.id)
     }
-    this.db.prepare('DELETE FROM sessions WHERE project_id = ?').run(projectId)
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
   }
 
   async clearAllData(): Promise<void> {
+    this.db.prepare('DELETE FROM metric_rollups_1m WHERE 1=1').run()
+    this.db.prepare('DELETE FROM session_summaries WHERE 1=1').run()
+    this.db.prepare('DELETE FROM otel_spans WHERE 1=1').run()
+    this.db.prepare('DELETE FROM otel_metrics WHERE 1=1').run()
+    this.db.prepare('DELETE FROM otel_events WHERE 1=1').run()
     this.db.prepare('DELETE FROM events WHERE 1=1').run()
     this.db.prepare('DELETE FROM agents WHERE 1=1').run()
     this.db.prepare('DELETE FROM sessions WHERE 1=1').run()
@@ -652,5 +699,126 @@ export class SqliteAdapter implements EventStore {
     return this.db.prepare(
       `SELECT * FROM otel_events WHERE ${conditions.join(' AND ')} ORDER BY timestamp ASC LIMIT ?`
     ).all(...bindings) as OtelEvent[]
+  }
+
+  // ── Metrics aggregation methods (v2) ───────────────────────────────────
+
+  async upsertMetricRollup(params: Omit<MetricRollup, 'id'>): Promise<void> {
+    this.db.prepare(`
+      INSERT INTO metric_rollups_1m
+        (session_id, metric_name, bucket, agg_sum, agg_count, agg_min, agg_max, attributes_key, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session_id, metric_name, bucket, attributes_key) DO UPDATE SET
+        agg_sum = metric_rollups_1m.agg_sum + excluded.agg_sum,
+        agg_count = metric_rollups_1m.agg_count + excluded.agg_count,
+        agg_min = MIN(COALESCE(metric_rollups_1m.agg_min, excluded.agg_min), excluded.agg_min),
+        agg_max = MAX(COALESCE(metric_rollups_1m.agg_max, excluded.agg_max), excluded.agg_max),
+        updated_at = excluded.updated_at
+    `).run(
+      params.session_id, params.metric_name, params.bucket,
+      params.agg_sum, params.agg_count, params.agg_min, params.agg_max,
+      params.attributes_key, params.updated_at,
+    )
+  }
+
+  async upsertSessionSummary(params: SessionSummary): Promise<void> {
+    this.db.prepare(`
+      INSERT INTO session_summaries
+        (session_id, project_id, total_cost_usd, total_tokens, input_tokens, output_tokens,
+         cache_read_tokens, api_request_count, tool_use_count, tool_error_count,
+         duration_s, model_breakdown, started_at, stopped_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session_id) DO UPDATE SET
+        total_cost_usd    = excluded.total_cost_usd,
+        total_tokens      = excluded.total_tokens,
+        input_tokens      = excluded.input_tokens,
+        output_tokens     = excluded.output_tokens,
+        cache_read_tokens = excluded.cache_read_tokens,
+        api_request_count = excluded.api_request_count,
+        tool_use_count    = excluded.tool_use_count,
+        tool_error_count  = excluded.tool_error_count,
+        duration_s        = excluded.duration_s,
+        model_breakdown   = excluded.model_breakdown,
+        started_at        = COALESCE(excluded.started_at, session_summaries.started_at),
+        stopped_at        = excluded.stopped_at,
+        updated_at        = excluded.updated_at
+    `).run(
+      params.session_id, params.project_id, params.total_cost_usd,
+      params.total_tokens, params.input_tokens, params.output_tokens,
+      params.cache_read_tokens, params.api_request_count, params.tool_use_count,
+      params.tool_error_count, params.duration_s, params.model_breakdown,
+      params.started_at, params.stopped_at, params.updated_at,
+    )
+  }
+
+  async getMetricRollups(
+    sessionId: string,
+    metricName?: string,
+    from?: number,
+    to?: number,
+  ): Promise<MetricRollup[]> {
+    const conditions: string[] = ['session_id = ?']
+    const bindings: any[] = [sessionId]
+
+    if (metricName) { conditions.push('metric_name = ?'); bindings.push(metricName) }
+    if (from != null) { conditions.push('bucket >= ?'); bindings.push(from) }
+    if (to != null) { conditions.push('bucket <= ?'); bindings.push(to) }
+
+    return this.db.prepare(
+      `SELECT * FROM metric_rollups_1m WHERE ${conditions.join(' AND ')} ORDER BY bucket ASC`
+    ).all(...bindings) as MetricRollup[]
+  }
+
+  async getSessionSummary(sessionId: string): Promise<SessionSummary | null> {
+    return (this.db.prepare(
+      'SELECT * FROM session_summaries WHERE session_id = ?'
+    ).get(sessionId) as SessionSummary | undefined) ?? null
+  }
+
+  async getSessionSummaries(
+    projectId?: number,
+    from?: number,
+    to?: number,
+  ): Promise<SessionSummary[]> {
+    const conditions: string[] = []
+    const bindings: any[] = []
+
+    if (projectId != null) { conditions.push('project_id = ?'); bindings.push(projectId) }
+    if (from != null) { conditions.push('started_at >= ?'); bindings.push(from) }
+    if (to != null) { conditions.push('started_at <= ?'); bindings.push(to) }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+    return this.db.prepare(
+      `SELECT * FROM session_summaries ${where} ORDER BY started_at DESC`
+    ).all(...bindings) as SessionSummary[]
+  }
+
+  async getOtelMetricsForSession(
+    sessionId: string,
+    filters?: { metricName?: string; limit?: number },
+  ): Promise<OtelMetric[]> {
+    const conditions: string[] = ['session_id = ?']
+    const bindings: any[] = [sessionId]
+
+    if (filters?.metricName) { conditions.push('metric_name = ?'); bindings.push(filters.metricName) }
+
+    const limit = filters?.limit ?? 500
+    bindings.push(limit)
+
+    return this.db.prepare(
+      `SELECT * FROM otel_metrics WHERE ${conditions.join(' AND ')} ORDER BY timestamp ASC LIMIT ?`
+    ).all(...bindings) as OtelMetric[]
+  }
+
+  async getOtelSpansForSession(sessionId: string, limit: number = 200): Promise<OtelSpan[]> {
+    return this.db.prepare(
+      'SELECT * FROM otel_spans WHERE session_id = ? ORDER BY start_time ASC LIMIT ?'
+    ).all(sessionId, limit) as OtelSpan[]
+  }
+
+  async getOtelSpansForTrace(traceId: string): Promise<OtelSpan[]> {
+    return this.db.prepare(
+      'SELECT * FROM otel_spans WHERE trace_id = ? ORDER BY start_time ASC'
+    ).all(traceId) as OtelSpan[]
   }
 }

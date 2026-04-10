@@ -13,15 +13,27 @@
 
 import { Hono } from 'hono'
 import type { EventStore } from '../storage/types'
+import type { MetricsAggregator } from '../services/metrics-aggregator'
 
 type Env = {
   Variables: {
     store: EventStore
     broadcastToSession: (sessionId: string, msg: object) => void
+    metricsAggregator: MetricsAggregator
   }
 }
 
 const router = new Hono<Env>()
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const SPAN_KIND: Record<number, string> = {
+  0: 'unspecified', 1: 'internal', 2: 'server', 3: 'client', 4: 'producer', 5: 'consumer',
+}
+
+const SPAN_STATUS: Record<number, string> = {
+  0: 'unset', 1: 'ok', 2: 'error',
+}
 
 // ── OTLP attribute value extraction ──────────────────────────────────────────
 // OTLP JSON uses a tagged union for attribute values.
@@ -62,6 +74,7 @@ function nanosToMs(nano: string | number | undefined): number {
 router.post('/v1/logs', async (c) => {
   const store = c.get('store')
   const broadcastToSession = c.get('broadcastToSession')
+  const aggregator = c.get('metricsAggregator')
   let body: any
   try { body = await c.req.json() } catch { return c.json({ error: 'Invalid JSON' }, 400) }
 
@@ -69,20 +82,19 @@ router.post('/v1/logs', async (c) => {
   const inserted: number[] = []
 
   for (const rl of body?.resourceLogs ?? []) {
-    // Extract resource-level attributes (session.id, organization.id, etc.)
     const resAttrs = attrsToMap(rl.resource?.attributes ?? [])
-    const sessionId: string | null = resAttrs['session.id'] ?? null
 
     for (const sl of rl.scopeLogs ?? []) {
       for (const lr of sl.logRecords ?? []) {
         const eventAttrs = attrsToMap(lr.attributes ?? [])
-        const eventName: string = eventAttrs['event.name'] ?? lr.body?.stringValue ?? 'unknown'
+        const sessionId: string | null = resAttrs['session.id'] ?? eventAttrs['session.id'] ?? null
+        const rawEventName: string = eventAttrs['event.name'] ?? lr.body?.stringValue ?? 'unknown'
+        const eventName = rawEventName.startsWith('claude_code.') ? rawEventName : `claude_code.${rawEventName}`
         const timestamp = nanosToMs(lr.timeUnixNano ?? lr.observedTimeUnixNano)
 
-        // Merge resource + event attributes for storage
         const allAttrs = { ...resAttrs, ...eventAttrs }
 
-        const id = await store.insertOtelEvent({
+        const otelEvent = {
           session_id: sessionId,
           prompt_id: eventAttrs['prompt.id'] ?? null,
           event_name: eventName,
@@ -98,10 +110,14 @@ router.post('/v1/logs', async (c) => {
           cache_creation_tokens: eventAttrs['cache_creation_tokens'] != null ? Number(eventAttrs['cache_creation_tokens']) : null,
           success: eventAttrs['success'] != null ? String(eventAttrs['success']) : null,
           created_at: now,
-        })
+        }
+
+        const id = await store.insertOtelEvent(otelEvent)
         inserted.push(id)
 
-        // Notify subscribed UI clients in real-time
+        // Write-time aggregation: update session summary
+        await aggregator.onOtelEventInserted({ id, ...otelEvent })
+
         if (sessionId) {
           broadcastToSession(sessionId, {
             type: 'otel_event',
@@ -131,6 +147,8 @@ router.post('/v1/logs', async (c) => {
 
 router.post('/v1/metrics', async (c) => {
   const store = c.get('store')
+  const broadcastToSession = c.get('broadcastToSession')
+  const aggregator = c.get('metricsAggregator')
   let body: any
   try { body = await c.req.json() } catch { return c.json({ error: 'Invalid JSON' }, 400) }
 
@@ -139,15 +157,12 @@ router.post('/v1/metrics', async (c) => {
 
   for (const rm of body?.resourceMetrics ?? []) {
     const resAttrs = attrsToMap(rm.resource?.attributes ?? [])
-    const sessionId: string | null = resAttrs['session.id'] ?? null
 
     for (const sm of rm.scopeMetrics ?? []) {
       for (const metric of sm.metrics ?? []) {
         const metricName: string = metric.name
-        // unit may be in metric.unit
         const unit: string | null = metric.unit ?? null
 
-        // Support sum, gauge, histogram data point types
         const dataPoints = [
           ...(metric.sum?.dataPoints ?? []),
           ...(metric.gauge?.dataPoints ?? []),
@@ -156,16 +171,16 @@ router.post('/v1/metrics', async (c) => {
 
         for (const dp of dataPoints) {
           const dpAttrs = attrsToMap(dp.attributes ?? [])
+          const sessionId: string | null = resAttrs['session.id'] ?? dpAttrs['session.id'] ?? null
           const allAttrs = { ...resAttrs, ...dpAttrs }
           const timestamp = nanosToMs(dp.timeUnixNano)
 
-          // Extract numeric value from datapoint
           let value = 0
           if (dp.asInt != null) value = typeof dp.asInt === 'string' ? parseInt(dp.asInt, 10) : dp.asInt
           else if (dp.asDouble != null) value = dp.asDouble
-          else if (dp.sum != null) value = dp.sum  // histogram sum
+          else if (dp.sum != null) value = dp.sum
 
-          await store.insertOtelMetric({
+          const otelMetric = {
             session_id: sessionId,
             metric_name: metricName,
             value,
@@ -173,7 +188,21 @@ router.post('/v1/metrics', async (c) => {
             attributes: JSON.stringify(allAttrs),
             timestamp,
             created_at: now,
-          })
+          }
+
+          const id = await store.insertOtelMetric(otelMetric)
+
+          // Write-time aggregation: update 1m rollup
+          await aggregator.onMetricInserted({ id, ...otelMetric })
+
+          // WebSocket broadcast
+          if (sessionId) {
+            broadcastToSession(sessionId, {
+              type: 'otel_metric',
+              data: { id, session_id: sessionId, metric_name: metricName, value, unit, timestamp },
+            })
+          }
+
           count++
         }
       }
@@ -187,6 +216,7 @@ router.post('/v1/metrics', async (c) => {
 
 router.post('/v1/traces', async (c) => {
   const store = c.get('store')
+  const broadcastToSession = c.get('broadcastToSession')
   let body: any
   try { body = await c.req.json() } catch { return c.json({ error: 'Invalid JSON' }, 400) }
 
@@ -195,11 +225,11 @@ router.post('/v1/traces', async (c) => {
 
   for (const rs of body?.resourceSpans ?? []) {
     const resAttrs = attrsToMap(rs.resource?.attributes ?? [])
-    const sessionId: string | null = resAttrs['session.id'] ?? null
 
     for (const ss of rs.scopeSpans ?? []) {
       for (const span of ss.spans ?? []) {
         const spanAttrs = attrsToMap(span.attributes ?? [])
+        const sessionId: string | null = resAttrs['session.id'] ?? spanAttrs['session.id'] ?? null
         const allAttrs = { ...resAttrs, ...spanAttrs }
 
         const startTimeNs = span.startTimeUnixNano
@@ -208,25 +238,35 @@ router.post('/v1/traces', async (c) => {
         const endMs = endTimeNs ? nanosToMs(endTimeNs) : null
         const durationMs = endMs != null ? endMs - startMs : null
 
-        const kindMap: Record<number, string> = {
-          0: 'unspecified', 1: 'internal', 2: 'server', 3: 'client', 4: 'producer', 5: 'consumer',
-        }
-        const statusCodeMap: Record<number, string> = { 0: 'unset', 1: 'ok', 2: 'error' }
+        const kind = SPAN_KIND[span.kind ?? 0] ?? 'unspecified'
+        const status = SPAN_STATUS[span.status?.code ?? 0] ?? 'unset'
 
-        await store.insertOtelSpan({
+        const id = await store.insertOtelSpan({
           trace_id: span.traceId ?? '',
           span_id: span.spanId ?? '',
           parent_span_id: span.parentSpanId ?? null,
           session_id: sessionId,
           name: span.name ?? '',
-          kind: kindMap[span.kind ?? 0] ?? 'unspecified',
+          kind,
           start_time: startMs,
           end_time: endMs,
           duration_ms: durationMs,
-          status: statusCodeMap[span.status?.code ?? 0] ?? 'unset',
+          status,
           attributes: JSON.stringify(allAttrs),
           created_at: now,
         })
+
+        if (sessionId) {
+          broadcastToSession(sessionId, {
+            type: 'otel_span',
+            data: {
+              id, session_id: sessionId, trace_id: span.traceId ?? '',
+              span_id: span.spanId ?? '', name: span.name ?? '',
+              duration_ms: durationMs, status,
+            },
+          })
+        }
+
         count++
       }
     }

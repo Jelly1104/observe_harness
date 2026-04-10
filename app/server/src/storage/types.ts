@@ -98,6 +98,53 @@ export interface OtelSummary {
   }>
 }
 
+// ── Metrics aggregation types ─────────────────────────────────────────────
+
+export interface MetricRollup {
+  id?: number
+  session_id: string | null
+  metric_name: string
+  bucket: number          // floor(ts / 60000) * 60000
+  agg_sum: number
+  agg_count: number
+  agg_min: number | null
+  agg_max: number | null
+  attributes_key: string
+  updated_at: number
+}
+
+export interface SessionSummary {
+  session_id: string
+  project_id: number | null
+  total_cost_usd: number
+  total_tokens: number
+  input_tokens: number
+  output_tokens: number
+  cache_read_tokens: number
+  api_request_count: number
+  tool_use_count: number
+  tool_error_count: number
+  duration_s: number
+  model_breakdown: string  // JSON
+  started_at: number | null
+  stopped_at: number | null
+  updated_at: number
+}
+
+export interface SessionDashboard {
+  cost: { total: number; ratePerMin: number }
+  tokens: {
+    input: number; output: number
+    cacheRead: number; velocityPerMin: number
+  }
+  api: { requestCount: number; avgLatencyMs: number | null; errorRate: number }
+  tools: {
+    totalUses: number; successRate: number
+    byTool: Record<string, { count: number; success: number; avgDurationMs: number }>
+  }
+  models: Record<string, { cost: number; requests: number }>
+}
+
 export interface EventStore {
   createProject(slug: string, name: string, transcriptPath: string | null): Promise<number>
   getProjectBySlug(slug: string): Promise<any | null>
@@ -146,4 +193,14 @@ export interface EventStore {
   insertOtelSpan(params: Omit<OtelSpan, 'id'>): Promise<number>
   getOtelSummaryForSession(sessionId: string): Promise<OtelSummary>
   getOtelEventsForSession(sessionId: string, filters?: { eventName?: string; promptId?: string; limit?: number }): Promise<OtelEvent[]>
+
+  // Metrics aggregation (v2)
+  upsertMetricRollup(params: Omit<MetricRollup, 'id'>): Promise<void>
+  upsertSessionSummary(params: SessionSummary): Promise<void>
+  getMetricRollups(sessionId: string, metricName?: string, from?: number, to?: number): Promise<MetricRollup[]>
+  getSessionSummary(sessionId: string): Promise<SessionSummary | null>
+  getSessionSummaries(projectId?: number, from?: number, to?: number): Promise<SessionSummary[]>
+  getOtelMetricsForSession(sessionId: string, filters?: { metricName?: string; limit?: number }): Promise<OtelMetric[]>
+  getOtelSpansForSession(sessionId: string, limit?: number): Promise<OtelSpan[]>
+  getOtelSpansForTrace(traceId: string): Promise<OtelSpan[]>
 }

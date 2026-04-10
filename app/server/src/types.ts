@@ -96,10 +96,59 @@ export interface ParsedEvent {
 
 // === WebSocket Message Types ===
 
+export interface OtelMetricBroadcast {
+  id: number
+  session_id: string
+  metric_name: string
+  value: number
+  unit: string | null
+  timestamp: number
+}
+
+export interface OtelSpanBroadcast {
+  id: number
+  session_id: string
+  trace_id: string
+  span_id: string
+  name: string
+  duration_ms: number | null
+  status: string | null
+}
+
+export interface SessionRates {
+  sessionId: string
+  toolsPerMin: number
+  costRatePerMin: number
+  tokenVelocityPerMin: number
+  timestamp: number
+}
+
+export interface FlowEnrichment {
+  sessionId: string
+  hookEventId: number
+  otelEventIds: number[]
+  costUsd: number | null
+  durationMs: number | null
+  enrichmentStatus: 'partial' | 'complete'
+}
+
+export interface AlertEvent {
+  ruleId: string
+  sessionId: string
+  currentValue: number
+  threshold: number
+  message: string
+}
+
 export type WSMessage =
   | { type: 'event'; data: ParsedEvent }
   | { type: 'session_update'; data: Session }
   | { type: 'project_update'; data: { id: number; name: string } }
+  | { type: 'otel_metric'; data: OtelMetricBroadcast }
+  | { type: 'otel_span'; data: OtelSpanBroadcast }
+  | { type: 'flow_enrich'; data: FlowEnrichment }
+  | { type: 'metric_update'; data: SessionRates }
+  | { type: 'metric_alert'; data: AlertEvent }
 
 // Messages FROM clients
 export type WSClientMessage =

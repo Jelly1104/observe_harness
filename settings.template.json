@@ -1,6 +1,15 @@
 {
   "env": {
-    "AGENTS_OBSERVE_PROJECT_SLUG": "__PROJECT_SLUG__"
+    "AGENTS_OBSERVE_PROJECT_SLUG": "__PROJECT_SLUG__",
+    "AGENTS_OBSERVE_API_BASE_URL": "http://localhost:4981/api",
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_TRACES_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4981",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+    "OTEL_LOG_TOOL_DETAILS": "1"
   },
   "hooks": {
     "SessionStart": [

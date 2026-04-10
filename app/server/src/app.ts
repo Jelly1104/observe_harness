@@ -17,12 +17,15 @@ import consumerRouter from './routes/consumer'
 import hooksConfigRouter from './routes/hooks-config'
 import skillsConfigRouter from './routes/skills-config'
 import otelIngestRouter from './routes/otel-ingest'
+import metricsRouter from './routes/metrics'
+import { MetricsAggregator } from './services/metrics-aggregator'
 
 type Env = {
   Variables: {
     store: EventStore
     broadcastToSession: (sessionId: string, msg: object) => void
     broadcastToAll: (msg: object) => void
+    metricsAggregator: MetricsAggregator
   }
 }
 
@@ -32,14 +35,16 @@ export function createApp(
   broadcastToAll: (msg: object) => void,
 ) {
   const app = new Hono<Env>()
+  const metricsAggregator = new MetricsAggregator(store)
 
   app.use('*', cors())
 
-  // Inject store and broadcast into all routes
+  // Inject store, broadcast, and aggregator into all routes
   app.use('*', async (c, next) => {
     c.set('store', store)
     c.set('broadcastToSession', broadcastToSession)
     c.set('broadcastToAll', broadcastToAll)
+    c.set('metricsAggregator', metricsAggregator)
     await next()
   })
 
@@ -52,6 +57,7 @@ export function createApp(
   app.route('/api', consumerRouter)
   app.route('/api', hooksConfigRouter)
   app.route('/api', skillsConfigRouter)
+  app.route('/api', metricsRouter)
 
   // OTLP ingest — registered at root (not /api) to match standard OTLP paths
   app.route('', otelIngestRouter)
